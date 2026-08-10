@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>สแกนบิลผู้ขาย — JJ Stock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --red:#C62127; --red-dark:#9E1A1F; --red-soft:#FDECEC;
+    --ink:#1F2328; --muted:#6B7280; --line:#E6E8EB;
+    --bg:#F5F6F8; --card:#FFFFFF; --ok:#0E8345; --ok-soft:#E7F6EE;
+    --warn:#B45309; --warn-soft:#FEF3E2;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0; padding:0}
+  body{
+    font-family:'Prompt', -apple-system, 'Segoe UI', Tahoma, sans-serif;
+    background:var(--bg); color:var(--ink);
+    min-height:100dvh; padding-bottom:env(safe-area-inset-bottom);
+  }
+  header{
+    background:var(--red); color:#fff;
+    padding:calc(14px + env(safe-area-inset-top)) 16px 14px;
+    position:sticky; top:0; z-index:20;
+  }
+  header h1{margin:0; font-size:17px; font-weight:600; display:flex; align-items:center; gap:8px}
+  header .sub{font-size:12px; opacity:.85; font-weight:400; margin-top:2px}
+  main{max-width:640px; margin:0 auto; padding:14px 14px 40px}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:12px}
+  .hint{font-size:12.5px; color:var(--muted); margin:0 0 10px}
+
+  /* ---------- ปุ่ม ---------- */
+  .btn{
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    border:none; border-radius:12px; padding:14px 16px; width:100%;
+    font-family:inherit; font-size:16px; font-weight:600; cursor:pointer;
+    background:#fff; color:var(--ink); border:1.5px solid var(--line);
+  }
+  .btn:active{transform:scale(.985)}
+  .btn.primary{background:var(--red); color:#fff; border-color:var(--red)}
+  .btn.primary:active{background:var(--red-dark)}
+  .btn.ghost{background:transparent; border-style:dashed}
+  .btn[disabled]{opacity:.45; pointer-events:none}
+  .btn-row{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px}
+  .btn-sm{width:auto; padding:9px 14px; font-size:14px; border-radius:10px}
+
+  /* ---------- รูปที่เลือก ---------- */
+  .pages{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px}
+  .pages:empty{display:none}
+  .page{
+    position:relative; width:86px; height:112px; border-radius:10px; overflow:hidden;
+    border:1px solid var(--line); background:#eee;
+  }
+  .page img{width:100%; height:100%; object-fit:cover; display:block}
+  .page .num{
+    position:absolute; left:6px; bottom:6px; background:rgba(0,0,0,.55); color:#fff;
+    font-size:11px; padding:1px 7px; border-radius:20px;
+  }
+  .page .rm{
+    position:absolute; top:4px; right:4px; width:24px; height:24px; border:none; border-radius:50%;
+    background:rgba(0,0,0,.55); color:#fff; font-size:14px; line-height:24px; cursor:pointer; padding:0;
+  }
+
+  /* ---------- โหลด / error ---------- */
+  .loading{display:flex; flex-direction:column; align-items:center; gap:14px; padding:34px 16px; text-align:center}
+  .spinner{
+    width:44px; height:44px; border-radius:50%;
+    border:4px solid var(--red-soft); border-top-color:var(--red);
+    animation:spin .9s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .loading .t1{font-weight:600}
+  .loading .t2{font-size:13px; color:var(--muted)}
+  .errbox{
+    background:var(--red-soft); border:1px solid #F3C2C4; color:var(--red-dark);
+    border-radius:12px; padding:12px 14px; font-size:14px; margin-bottom:12px;
+    word-break:break-word;
+  }
+
+  /* ---------- ฟอร์มผลลัพธ์ ---------- */
+  label.f{display:block; font-size:12.5px; color:var(--muted); margin:0 0 4px}
+  input, select{
+    font-family:inherit; font-size:16px; /* กัน iOS ซูม */
+    width:100%; padding:10px 12px; border:1.5px solid var(--line); border-radius:10px;
+    background:#fff; color:var(--ink); outline:none;
+  }
+  input:focus{border-color:var(--red)}
+  input.num{text-align:right; font-variant-numeric:tabular-nums}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .grid3{display:grid; grid-template-columns:1.4fr 1fr 1fr; gap:10px}
+  .mt10{margin-top:10px}
+
+  .sec-title{
+    display:flex; align-items:center; justify-content:space-between;
+    margin:16px 2px 8px; font-size:14px; font-weight:600;
+  }
+  .sec-title .count{font-size:12px; color:var(--muted); font-weight:400}
+
+  /* ---------- การ์ดรายการสินค้า ---------- */
+  .item{
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:11px 12px; margin-bottom:10px;
+  }
+  .item .row1{display:flex; gap:8px; align-items:center; margin-bottom:8px}
+  .item .no{
+    flex:0 0 auto; width:26px; height:26px; border-radius:8px; background:var(--red-soft);
+    color:var(--red); font-size:12.5px; font-weight:600; display:flex; align-items:center; justify-content:center;
+  }
+  .item .name{flex:1}
+  .item .del{
+    flex:0 0 auto; width:32px; height:32px; border:none; border-radius:9px;
+    background:#F3F4F6; color:#9CA3AF; font-size:16px; cursor:pointer;
+  }
+  .item .del:active{background:var(--red-soft); color:var(--red)}
+  .item .row2{display:grid; grid-template-columns:1fr .9fr 1.1fr 1.2fr; gap:7px}
+  .item .cell label{display:block; font-size:10.5px; color:var(--muted); margin:0 0 3px}
+  .item .cell input{padding:8px 8px; font-size:16px; border-radius:9px}
+
+  /* ---------- สรุปยอด ---------- */
+  .totals .rowt{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 0}
+  .totals .rowt + .rowt{border-top:1px dashed var(--line)}
+  .totals .lab{font-size:14px; color:var(--muted)}
+  .totals .val{font-size:15px; font-weight:600; font-variant-numeric:tabular-nums}
+  .totals input{max-width:150px; text-align:right}
+  .badge{
+    display:inline-flex; align-items:center; gap:6px; border-radius:20px;
+    padding:6px 12px; font-size:13px; font-weight:600; margin-top:10px;
+  }
+  .badge.ok{background:var(--ok-soft); color:var(--ok)}
+  .badge.warn{background:var(--warn-soft); color:var(--warn)}
+  .notes{
+    background:var(--warn-soft); border:1px solid #F5DFB8; color:#7C4A03;
+    border-radius:10px; padding:10px 12px; font-size:13px; margin-top:10px;
+  }
+
+  .export-row{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px}
+  .toast{
+    position:fixed; left:50%; bottom:calc(24px + env(safe-area-inset-bottom)); transform:translateX(-50%);
+    background:var(--ink); color:#fff; font-size:13.5px; padding:9px 16px; border-radius:20px;
+    opacity:0; pointer-events:none; transition:opacity .25s; z-index:50; white-space:nowrap;
+  }
+  .toast.show{opacity:1}
+  [hidden]{display:none !important}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📷 สแกนบิลผู้ขาย</h1>
+  <div class="sub">ถ่ายรูปบิล → AI อ่านรายการสินค้าให้อัตโนมัติ</div>
+</header>
+
+<main>
+
+  <!-- ขั้นตอน 1: เลือกรูป -->
+  <section id="secCapture" class="card">
+    <p class="hint">ถ่ายให้เห็นทั้งใบ แสงสว่าง ไม่เอียงมาก • บิลยาวถ่ายต่อกันหลายรูปได้ (นับเป็นบิลเดียวกัน สูงสุด 6 รูป)</p>
+    <div class="pages" id="pageList"></div>
+    <div class="btn-row">
+      <label class="btn primary">
+        📷 ถ่ายรูปบิล
+        <input type="file" accept="image/*" capture="environment" hidden onchange="addPages(this)">
+      </label>
+      <label class="btn">
+        🖼️ เลือกจากอัลบั้ม
+        <input type="file" accept="image/*" multiple hidden onchange="addPages(this)">
+      </label>
+    </div>
+    <button id="btnScan" class="btn primary" disabled onclick="scanBill()">🔍 อ่านบิล</button>
+  </section>
+
+  <!-- ขั้นตอน 2: กำลังอ่าน -->
+  <section id="secLoading" class="card" hidden>
+    <div class="loading">
+      <div class="spinner"></div>
+      <div class="t1">AI กำลังอ่านบิล…</div>
+      <div class="t2">ปกติใช้เวลา 5–15 วินาที</div>
+    </div>
+  </section>
+
+  <div id="errBox" class="errbox" hidden></div>
+
+  <!-- ขั้นตอน 3: ผลลัพธ์ (แก้ไขได้) -->
+  <section id="secResult" hidden>
+
+    <div class="card">
+      <label class="f">ผู้ขาย / ซัพพลายเออร์</label>
+      <input id="fSupplier" placeholder="ชื่อร้าน / บริษัท">
+      <div class="grid2 mt10">
+        <div>
+          <label class="f">เลขที่บิล</label>
+          <input id="fBillNo" placeholder="เลขที่บิล">
+        </div>
+        <div>
+          <label class="f">วันที่บิล</label>
+          <input id="fDate" type="date">
+        </div>
+      </div>
+    </div>
+
+    <div class="sec-title">
+      รายการสินค้า <span class="count" id="itemCount"></span>
+    </div>
+    <div id="itemList"></div>
+    <button class="btn ghost" onclick="addItem()">＋ เพิ่มรายการ</button>
+
+    <div class="card totals" style="margin-top:14px">
+      <div class="rowt">
+        <span class="lab">รวมจากรายการ (คำนวณ)</span>
+        <span class="val" id="tCalc">0.00</span>
+      </div>
+      <div class="rowt">
+        <span class="lab">ส่วนลด</span>
+        <input id="fDiscount" class="num" inputmode="decimal" placeholder="0" oninput="updateTotals()">
+      </div>
+      <div class="rowt">
+        <span class="lab">VAT</span>
+        <input id="fVat" class="num" inputmode="decimal" placeholder="0" oninput="updateTotals()">
+      </div>
+      <div class="rowt">
+        <span class="lab">ยอดสุทธิตามบิล</span>
+        <input id="fTotal" class="num" inputmode="decimal" placeholder="0" oninput="updateTotals()">
+      </div>
+      <div id="matchBadge"></div>
+      <div id="aiNotes" class="notes" hidden></div>
+    </div>
+
+    <div class="export-row">
+      <button class="btn btn-sm" onclick="copyJSON()">📋 คัดลอก JSON</button>
+      <button class="btn btn-sm" onclick="downloadCSV()">⬇️ ดาวน์โหลด CSV</button>
+    </div>
+    <button class="btn ghost mt10" style="margin-top:12px" onclick="resetAll()">🔄 สแกนบิลใหม่</button>
+
+  </section>
+
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script>
+/* ============================================================
+   ⚙️ CONFIG — แก้จุดเดียว: ใส่ URL ของ Cloudflare Worker
+   (ไฟล์ jjmk-billocr-worker.js หลัง deploy แล้ว)
+   ============================================================ */
+const WORKER_URL = 'https://YOUR-WORKER-NAME.YOUR-SUBDOMAIN.workers.dev';
+
+/* ---------------- state ---------------- */
+let pages = [];   // [{data(base64), mime, thumb(dataURL)}]
+let items = [];   // [{code,name,qty,unit,unit_price,amount}]
+
+/* ---------------- เลือกรูป + ย่อรูป ---------------- */
+async function addPages(input){
+  const files = Array.from(input.files || []);
+  input.value = '';
+  for (const f of files){
+    if (pages.length >= 6){ toast('สูงสุด 6 รูปต่อบิล'); break; }
+    try{
+      pages.push(await fileToPage(f));
+    }catch(e){
+      toast('อ่านรูปไม่สำเร็จ ลองใหม่อีกครั้ง');
+    }
+  }
+  renderPages();
+}
+
+async function fileToPage(file){
+  const bmp = await loadBitmap(file);
+  const w0 = bmp.width || bmp.naturalWidth, h0 = bmp.height || bmp.naturalHeight;
+  const scale = Math.min(1, 1600 / Math.max(w0, h0));
+  const w = Math.round(w0 * scale), h = Math.round(h0 * scale);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  c.getContext('2d').drawImage(bmp, 0, 0, w, h);
+  const dataUrl = c.toDataURL('image/jpeg', 0.85);
+  return { data: dataUrl.split(',')[1], mime: 'image/jpeg', thumb: dataUrl };
+}
+
+async function loadBitmap(file){
+  if ('createImageBitmap' in window){
+    try{ return await createImageBitmap(file); }catch(e){}
+  }
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.src = url;
+  await img.decode();
+  URL.revokeObjectURL(url);
+  return img;
+}
+
+function renderPages(){
+  const el = document.getElementById('pageList');
+  el.innerHTML = pages.map((p,i)=>`
+    <div class="page">
+      <img src="${p.thumb}" alt="หน้า ${i+1}">
+      <span class="num">${i+1}</span>
+      <button class="rm" onclick="removePage(${i})" aria-label="ลบรูป">✕</button>
+    </div>`).join('');
+  document.getElementById('btnScan').disabled = pages.length === 0;
+}
+function removePage(i){ pages.splice(i,1); renderPages(); }
+
+/* ---------------- เรียก Worker ---------------- */
+async function scanBill(){
+  show('secCapture', false); show('secLoading', true); show('secResult', false);
+  showErr('');
+  try{
+    const r = await fetch(WORKER_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ images: pages.map(p=>({data:p.data, mime:p.mime})) })
+    });
+    const data = await r.json().catch(()=>({}));
+    if (!r.ok || !data.ok){
+      throw new Error(data.detail || data.error || ('HTTP '+r.status));
+    }
+    fillResult(data.result || {});
+    show('secLoading', false); show('secResult', true);
+    window.scrollTo({top:0});
+  }catch(e){
+    show('secLoading', false); show('secCapture', true);
+    showErr('อ่านบิลไม่สำเร็จ: ' + e.message + ' — ลองถ่ายใหม่ให้ชัดขึ้น หรือกดอ่านอีกครั้ง');
+  }
+}
+
+/* ---------------- แสดงผล + แก้ไข ---------------- */
+function fillResult(res){
+  document.getElementById('fSupplier').value = res.supplier_name || '';
+  document.getElementById('fBillNo').value   = res.bill_no || '';
+  document.getElementById('fDate').value     = res.bill_date || '';
+  document.getElementById('fDiscount').value = numOrEmpty(res.discount);
+  document.getElementById('fVat').value      = numOrEmpty(res.vat);
+  document.getElementById('fTotal').value    = numOrEmpty(res.total);
+
+  items = (res.items || []).map(it => ({
+    code: it.code || '',
+    name: it.name || '',
+    qty: toNum(it.qty),
+    unit: it.unit || '',
+    unit_price: toNum(it.unit_price),
+    amount: toNum(it.amount)
+  }));
+  // ถ้า amount ว่างแต่มี qty*price ให้คำนวณให้
+  items.forEach(it=>{
+    if (it.amount == null && it.qty != null && it.unit_price != null){
+      it.amount = round2(it.qty * it.unit_price);
+    }
+  });
+
+  const notes = document.getElementById('aiNotes');
+  if (res.notes){ notes.textContent = '⚠️ AI แจ้งว่า: ' + res.notes; notes.hidden = false; }
+  else notes.hidden = true;
+
+  renderItems();
+}
+
+function renderItems(){
+  const el = document.getElementById('itemList');
+  el.innerHTML = items.map((it,i)=>`
+    <div class="item">
+      <div class="row1">
+        <span class="no">${i+1}</span>
+        <input class="name" placeholder="ชื่อสินค้า" value="${esc(it.name)}"
+               oninput="items[${i}].name=this.value">
+        <button class="del" onclick="delItem(${i})" aria-label="ลบรายการ">🗑</button>
+      </div>
+      <div class="row2">
+        <div class="cell"><label>จำนวน</label>
+          <input class="num" inputmode="decimal" value="${numOrEmpty(it.qty)}"
+                 oninput="onQtyPrice(${i},'qty',this.value)"></div>
+        <div class="cell"><label>หน่วย</label>
+          <input value="${esc(it.unit)}" oninput="items[${i}].unit=this.value"></div>
+        <div class="cell"><label>ราคา/หน่วย</label>
+          <input class="num" inputmode="decimal" value="${numOrEmpty(it.unit_price)}"
+                 oninput="onQtyPrice(${i},'unit_price',this.value)"></div>
+        <div class="cell"><label>จำนวนเงิน</label>
+          <input class="num" inputmode="decimal" id="amt${i}" value="${numOrEmpty(it.amount)}"
+                 oninput="items[${i}].amount=toNum(this.value); updateTotals()"></div>
+      </div>
+    </div>`).join('');
+  document.getElementById('itemCount').textContent = items.length + ' รายการ';
+  updateTotals();
+}
+
+function onQtyPrice(i, key, val){
+  items[i][key] = toNum(val);
+  const it = items[i];
+  if (it.qty != null && it.unit_price != null){
+    it.amount = round2(it.qty * it.unit_price);
+    const amtEl = document.getElementById('amt'+i);
+    if (amtEl) amtEl.value = it.amount;
+  }
+  updateTotals();
+}
+
+function addItem(){
+  items.push({code:'', name:'', qty:null, unit:'', unit_price:null, amount:null});
+  renderItems();
+  const list = document.getElementById('itemList');
+  list.lastElementChild?.querySelector('.name')?.focus();
+}
+function delItem(i){ items.splice(i,1); renderItems(); }
+
+function updateTotals(){
+  const sum = round2(items.reduce((s,it)=> s + (it.amount||0), 0));
+  document.getElementById('tCalc').textContent = fmt(sum);
+
+  const discount = toNum(document.getElementById('fDiscount').value) || 0;
+  const vat      = toNum(document.getElementById('fVat').value) || 0;
+  const total    = toNum(document.getElementById('fTotal').value);
+
+  const badge = document.getElementById('matchBadge');
+  if (total == null){ badge.innerHTML = ''; return; }
+  const expect = round2(sum - discount + vat);
+  const diff = round2(expect - total);
+  if (Math.abs(diff) <= 0.5){
+    badge.innerHTML = '<span class="badge ok">✓ ยอดตรงกับบิล</span>';
+  } else {
+    badge.innerHTML = '<span class="badge warn">⚠ ยอดต่างกัน ' + fmt(Math.abs(diff)) +
+      ' บาท — ตรวจจำนวน/ราคาอีกครั้ง</span>';
+  }
+}
+
+/* ---------------- export ---------------- */
+function buildData(){
+  return {
+    supplier_name: document.getElementById('fSupplier').value || null,
+    bill_no: document.getElementById('fBillNo').value || null,
+    bill_date: document.getElementById('fDate').value || null,
+    items: items.map(it=>({
+      code: it.code || null, name: it.name || null, qty: it.qty,
+      unit: it.unit || null, unit_price: it.unit_price, amount: it.amount
+    })),
+    discount: toNum(document.getElementById('fDiscount').value),
+    vat: toNum(document.getElementById('fVat').value),
+    total: toNum(document.getElementById('fTotal').value)
+  };
+}
+
+async function copyJSON(){
+  const text = JSON.stringify(buildData(), null, 2);
+  try{
+    await navigator.clipboard.writeText(text);
+    toast('คัดลอก JSON แล้ว');
+  }catch(e){
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); ta.remove();
+    toast('คัดลอก JSON แล้ว');
+  }
+}
+
+function downloadCSV(){
+  const d = buildData();
+  const rows = [
+    ['ผู้ขาย', d.supplier_name || ''],
+    ['เลขที่บิล', d.bill_no || ''],
+    ['วันที่', d.bill_date || ''],
+    [],
+    ['ลำดับ','รหัส','ชื่อสินค้า','จำนวน','หน่วย','ราคาต่อหน่วย','จำนวนเงิน'],
+    ...d.items.map((it,i)=>[i+1, it.code||'', it.name||'', it.qty??'', it.unit||'', it.unit_price??'', it.amount??'']),
+    [],
+    ['ส่วนลด','', '', '', '', '', d.discount??''],
+    ['VAT','', '', '', '', '', d.vat??''],
+    ['ยอดสุทธิ','', '', '', '', '', d.total??'']
+  ];
+  const csv = '\uFEFF' + rows.map(r=>r.map(c=>{
+    const s = String(c ?? '');
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const name = (d.bill_no || 'bill') + '_' + (d.bill_date || todayStr());
+  a.download = 'บิล_' + name.replace(/[\\/:*?"<>|]/g,'-') + '.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function resetAll(){
+  pages = []; items = [];
+  renderPages();
+  show('secResult', false); show('secCapture', true); showErr('');
+  window.scrollTo({top:0});
+}
+
+/* ---------------- utils ---------------- */
+function show(id, on){ document.getElementById(id).hidden = !on; }
+function showErr(msg){
+  const el = document.getElementById('errBox');
+  el.textContent = msg; el.hidden = !msg;
+}
+function toNum(v){
+  if (v === null || v === undefined || v === '') return null;
+  const n = parseFloat(String(v).replace(/,/g,''));
+  return isNaN(n) ? null : n;
+}
+function numOrEmpty(v){ return (v === null || v === undefined) ? '' : v; }
+function round2(n){ return Math.round(n * 100) / 100; }
+function fmt(n){ return (n??0).toLocaleString('th-TH',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+function esc(s){ return String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+let toastTimer;
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>el.classList.remove('show'), 2200);
+}
+</script>
+</body>
+</html>
