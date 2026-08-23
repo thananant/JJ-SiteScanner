@@ -371,7 +371,7 @@
     </section>
   </div>
 
-  <footer>JJ Site Scanner v2.6 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v2.8 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -1246,6 +1246,16 @@ function renderQList(items, mks){
     });
   });
 }
+function rvOldest(it){
+  let min = null;
+  (it.rv||[]).forEach(r=>{
+    if(r.p){ const t = Date.parse(r.p); if(isFinite(t) && (min===null || t < min)) min = t; }
+  });
+  return min;
+}
+function fmtMonthYear(t){
+  try{ return new Date(t).toLocaleDateString('th-TH',{month:'short', year:'numeric'}); }catch(e){ return ''; }
+}
 function rvHtml(it){
   let head = '<div class="d">คะแนนรวม '+esc(it.rating||'-')+'★ จากทั้งหมด '+(it.reviews? Number(it.reviews).toLocaleString():'-')+' รีวิว</div>';
   const yr = {};
@@ -1257,6 +1267,10 @@ function rvHtml(it){
     head += '<div class="d">รีวิวเด่น '+(it.rv||[]).length+' รายการที่ API ให้ กระจายตามปี (ไม่ใช่ทุกรีวิว — Google ไม่เปิดฮิสโตแกรมรายปีทั้งหมด): '+
       ys.map(y=>'พ.ศ. '+y+' ×'+yr[y].c+' เฉลี่ย '+(yr[y].s/yr[y].c).toFixed(1)+'★').join(' · ')+'</div>';
   }
+  const old0 = rvOldest(it);
+  if(old0){
+    head += '<div class="d">รีวิวเก่าสุดที่เห็นผ่าน API: ~'+fmtMonthYear(old0)+' — ใช้เป็นหลักฐานขั้นต่ำว่าร้านมีมา "อย่างน้อย" ตั้งแต่ช่วงนั้น (API ให้เฉพาะรีวิวเด่น ร้านอาจเปิดก่อนหน้านี้)</div>';
+  }
   const h = it.hist||[];
   if(h.length >= 2){
     const a = h[0], b = h[h.length-1];
@@ -1266,7 +1280,23 @@ function rvHtml(it){
     head += '<div class="d">เริ่มบันทึกยอดรีวิวของร้านนี้แล้ว — สแกนโซนซ้ำ/กดอ่านรีวิวอีกครั้งในสัปดาห์หน้า ระบบจะคำนวณ "อัตรารีวิวเพิ่ม/สัปดาห์" ให้อัตโนมัติ (ตัววัดว่าร้านกำลังมาแรงหรือแผ่ว)</div>';
   }
   head += '<div class="d">อ่านรีวิวครบทุกรายการที่ปุ่ม "เปิดใน Google Maps"</div>';
-  const deep = it.deep ? ('<div class="qrv-item"><b>ประวัติร้าน (AI ค้นเว็บ):</b> เปิดเมื่อ: '+esc(it.deep.opened||'-')+' · กระแส: '+esc(it.deep.trend||'-')+(it.deep.why?('<br>เหตุที่คิวยาว: '+esc(it.deep.why)):'')+'</div>') : '';
+  let deep = '';
+  if(it.deep){
+    const li = (arr, color, label) => (arr && arr.length)
+      ? ('<div style="margin-top:6px"><b style="color:'+color+'">'+label+':</b><ul class="checks" style="margin-top:2px">'+arr.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul></div>')
+      : '';
+    let opened = it.deep.opened || '';
+    if(!opened || /ไม่พบ/.test(opened)){
+      const o = rvOldest(it);
+      opened = o ? ('อย่างน้อยตั้งแต่ ~'+fmtMonthYear(o)+' (อิงรีวิวเก่าสุดที่ API ให้)') : (opened || '-');
+    }
+    deep = '<div class="qrv-item"><b>บทวิเคราะห์ร้าน (AI อ่านรีวิว+ค้นเว็บ):</b><br>เปิดเมื่อ: '+esc(opened)+' · กระแส: '+esc(it.deep.trend||'-')+
+      (it.deep.why ? ('<br>เหตุที่คิวยาว: '+esc(it.deep.why)) : '')+
+      li(it.deep.pros, '#8fd3a5', 'ด้านดีที่ลูกค้าชม')+
+      li(it.deep.cons, '#ff9b9e', 'ด้านไม่ดีที่ลูกค้าติ')+
+      li(it.deep.pain, '#e8c07a', 'Pain point ของลูกค้า')+
+      '</div>';
+  }
   const body = (it.rv||[]).map(r=>(
     '<div class="qrv-item"><b>'+esc(r.r)+'★</b> · '+esc(r.t||'')+'<br>'+esc(r.x||'')+'<div class="d">— '+esc(r.a||'ผู้ใช้ Google')+'</div></div>'
   )).join('');
@@ -1277,13 +1307,16 @@ async function deepDive(k, panel){
   const d = loadQData();
   const it = d.items.find(x=>qKeyOf(x)===k);
   if(!it){ panel.innerHTML = '<div class="d">ไม่พบข้อมูลร้าน</div>'; return; }
-  if(it.deep){ panel.innerHTML = rvHtml(it); return; }
+  if(it.deep && it.deep.pros){ panel.innerHTML = rvHtml(it); return; }
   const before = panel.innerHTML;
   panel.innerHTML = '<div class="d">กำลังสืบประวัติร้านจากเว็บ (~30–60 วินาที)…</div>';
   try{
-    const p = 'ใช้ web_search (2-4 ครั้ง) ค้นข้อมูลร้านอาหาร "'+it.name+'" ย่าน '+(it.zone||'กรุงเทพฯ/ปริมณฑล')+' เพื่อตอบ: 1) ร้านเปิด/ก่อตั้งเมื่อไหร่ (วันที่หรือปี พ.ศ.) 2) กระแสตอนนี้ขาขึ้นหรือขาลง มีข่าว/การขยายสาขา/เหตุการณ์อะไรล่าสุด 3) เหตุผลหลักที่คนต่อคิว ตอบเป็น JSON ล้วนเท่านั้น: {"opened":"...","trend":"...","why":"..."} กติกา: ตอบจากข้อมูลที่ค้นพบจริงเท่านั้น ข้อไหนหาไม่เจอให้ใส่ "ไม่พบข้อมูล" ห้ามเดา แต่ละ field สั้นไม่เกิน 1-2 ประโยค';
-    const out = await apiCall({ model: MODEL_NAME, max_tokens: 1200, messages: [{role:'user', content: p}],
-      tools: [{type:'web_search_20250305', name:'web_search', max_uses:4}] });
+    const voice = (it.rv && it.rv.length)
+      ? ('\n\nข้อความรีวิวจริงจาก Google Maps ของร้านนี้ (ใช้เป็นวัตถุดิบหลักในการสรุป):\n' + it.rv.map(r=>'- ('+(r.r||'?')+'★) '+String(r.x||'').replace(/\s+/g,' ').slice(0,240)).join('\n'))
+      : '';
+    const p = 'สืบข้อมูลร้านอาหาร "'+it.name+'" ย่าน '+(it.zone||'กรุงเทพฯ/ปริมณฑล')+' ด้วย web_search 3-5 ครั้ง (เช่น ชื่อร้าน+เปิดปีไหน, ชื่อร้าน+รีวิว, ชื่อร้าน+pantip, ชื่อร้าน+wongnai) แล้วอ่านรีวิว/บทความที่พบให้จริง'+voice+'\n\nตอบเป็น JSON ล้วนเท่านั้น:\n{"opened":"วันที่/ปี พ.ศ. ที่เปิด — ถ้าหาวันเปิดจริงไม่เจอ ให้ประมาณจากหลักฐานเก่าสุดที่พบแทน (รีวิวแรกสุดใน Google/Wongnai/Pantip หรือโพสต์แรกของเพจร้าน) เขียนรูปแบบ: ประมาณ พ.ศ. xxxx (อิงรีวิวเก่าสุดที่พบ) — ใส่ ไม่พบข้อมูล เฉพาะเมื่อไม่มีร่องรอยใดๆ เลย","trend":"กระแสขาขึ้น/ขาลง + เหตุการณ์ล่าสุด 1 ประโยค","why":"เหตุผลหลักที่คิวยาว 1 ประโยค","pros":["ด้านดีที่ลูกค้าชมซ้ำๆ 3-5 ข้อ สั้นๆ"],"cons":["ด้านไม่ดีที่ลูกค้าติ 2-4 ข้อ"],"pain":["pain point ที่ทำลูกค้าหงุดหงิด/เสียประสบการณ์ 2-4 ข้อ ระบุให้จับต้องได้ เช่น รอคิวกี่นาที ที่จอดไม่พอ ของหมดช่วงไหน บริการช้า ควันแสบตา"]}\nกติกา: สรุปจากรีวิว/ข้อมูลที่พบจริงเท่านั้น ห้ามเดา ข้อไหนไม่พบใส่ "ไม่พบข้อมูล" หรือ [] | แยกให้ชัด: cons = คุณภาพร้านที่แย่, pain = ความลำบากของลูกค้าแม้ร้านจะดี';
+    const out = await apiCall({ model: MODEL_NAME, max_tokens: 2000, messages: [{role:'user', content: p}],
+      tools: [{type:'web_search_20250305', name:'web_search', max_uses:5}] });
     let t = out.text.replace(/```json|```/g,'').trim();
     const s = t.indexOf('{'), e = t.lastIndexOf('}');
     if(s===-1 || e===-1) throw new Error('ไม่ได้คำตอบที่ใช้ได้ — ลองกดใหม่');
@@ -1477,6 +1510,7 @@ $('btnQAnalyze').addEventListener('click', async ()=>{
     const lines = items.slice(0, 150).map(it=>{
       let s = (it.name||'')+' | '+(it.zone||'')+' | '+(it.type||'-')+' | '+(it.reviews||'?')+' รีวิว '+(it.rating||'')+'★ | '+(it.queue_evidence||'');
       if(it.rv && it.rv.length){ s += ' | เสียงลูกค้า: '+it.rv.slice(0,2).map(r=>String(r.x||'').replace(/\s+/g,' ').slice(0,110)).join(' / '); }
+      if(it.deep){ s += ' | ดี['+((it.deep.pros||[]).slice(0,3).join('; '))+'] แย่/pain['+((it.deep.cons||[]).concat(it.deep.pain||[]).slice(0,4).join('; '))+']'; }
       return s;
     }).join('\n');
     const p = 'คุณคือนักวิเคราะห์ธุรกิจร้านอาหารของ "จริงใจหมูกระทะ" (บุฟเฟต์หมูกระทะ+ชาบูในโต๊ะเดียว 239/329+ชุดน้ำ 59 เปิด 11:00-02:00 มี 2 สาขา: ลาดพร้าววังหิน ~4 ลบ./เดือน และรัชดา 7.5 ลบ.เดือนแรก กำลังหาทำเลสาขา 3 แบบ 350-500 ตรม. จอด 30+ คัน เพดานเช่า 150-200K)\n\nข้อมูลร้านคิวยาวที่รวบรวมจาก Google Maps ('+items.length+' ร้าน) รูปแบบ: ชื่อ | โซน | หมวด | รีวิว | หลักฐานคิว | เสียงลูกค้า\n'+lines+'\n\nวิเคราะห์เป็นภาษาไทย กระชับ เป็นหัวข้อ:\n1) จุดร่วมของร้านคิวยาวชุดนี้ (หมวดไหนครอง ราคา ช่วงเวลา รูปแบบร้าน)\n2) จัดอันดับโซนตามความหนาแน่นของ demand จากข้อมูลนี้\n3) ช่องว่างของ "หมูกระทะ+ชาบูในโต๊ะเดียว format ใหญ่": โซนที่คิวยาวเยอะแต่ยังไม่มีคู่แข่งสายตรง\n4) บทเรียนจากเสียงลูกค้า: อะไรทำให้คนยอมต่อคิว อะไรที่คนบ่น — จริงใจควรทำ/เลี่ยงอะไร\n5) ข้อเสนอ 3 ข้อที่ลงมือได้จริงสำหรับสาขา 3\nอิงเฉพาะข้อมูลที่ให้ ถ้าข้อมูลบางโซนน้อยให้บอกว่ายังสแกนไม่พอ ห้ามกุตัวเลข';
