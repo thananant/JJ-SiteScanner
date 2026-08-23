@@ -338,8 +338,9 @@
         <span><i style="background:#6e8fb2"></i>ทำเลที่สแกน</span>
       </div>
       <div class="qbtnrow">
-        <button class="qbtn" id="btnQAi">รวบรวมด้วย AI (ใช้ key เดิม)</button>
-        <button class="qbtn alt" id="btnQGoogle">สแกนรีวิวคิวจาก Google Places</button>
+        <button class="qbtn" id="btnQSweep">สแกนทุกโซนอัตโนมัติ (20 โซน)</button>
+        <button class="qbtn alt" id="btnQGoogle">สแกนเฉพาะโซนที่เลือก</button>
+        <button class="qbtn alt" id="btnQAi">รวบรวมด้วย AI (ใช้ key เดิม)</button>
       </div>
       <div class="grid2">
         <div>
@@ -354,7 +355,8 @@
       <label style="margin-top:10px"><input type="checkbox" id="qBuffetOnly" style="width:auto;margin-right:8px">แสดงเฉพาะสายบุฟเฟต์ / ชาบู / หมูกระทะ / ปิ้งย่าง</label>
       <div class="hint">
         • ปุ่ม AI: ใช้ Anthropic key เดิม ไปกวาดรีวิว Google Maps + บทความ หาร้านที่คนพูดว่า "คิวยาว คิวเยอะ รอนาน คนเยอะ" ทั่ว กทม.+ปริมณฑล (~1–2 นาที)<br>
-        • ปุ่ม Google: ยิง Places API ค้นคำว่าคิวยาว/รอคิวในโซนที่เลือกแบบสด — ต้องมี Google Maps API key (สร้างที่ console.cloud.google.com เปิดใช้ Maps JavaScript API + Places API (New) มีโควตาฟรีรายเดือนพอใช้ส่วนตัว แนะนำตั้ง restriction โดเมน + budget alert)<br>
+        • ปุ่มสแกนทุกโซน: ไล่ค้นครบ 20 โซนอัตโนมัติใน ~2–3 นาที (~60 ครั้ง/รอบ จากโควตาฟรี ~5,000 ครั้ง/เดือน) กดซ้ำเพื่อหยุดกลางทางได้ — แนะนำรันซ้ำสัปดาห์ละครั้งเพื่อให้ระบบคำนวณอัตรารีวิวเพิ่ม<br>
+        • ปุ่มสแกนเฉพาะโซน: ค้นสดเฉพาะโซนที่เลือกจาก dropdown — ทั้งสองปุ่มต้องมี Google Maps API key<br>
         • ข้อมูลทั้งสองทางถูกรวมเข้าชุดเดียว จำไว้ในเครื่อง แตะหมุด/รายการเพื่อดูรายละเอียดและเปิดใน Google Maps
       </div>
       <div class="err" id="qErr"></div>
@@ -369,7 +371,7 @@
     </section>
   </div>
 
-  <footer>JJ Site Scanner v2.5 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v2.6 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -1365,16 +1367,10 @@ async function gplacesSearch(q, lat, lng, gk){
   const j = await res.json();
   return j.places || [];
 }
-async function qFetchGoogle(){
-  const gk = ($('inGKey').value || '').trim();
-  if(!gk) throw new Error('ต้องใส่ Google Maps API key ก่อน (ช่องด้านบน) — โหมดนี้ยิง Places API ตรง');
-  store.set(GKEY_KEY, gk);
-  const zi = Number($('qZone').value);
-  const z = Q_ZONES[zi];
-  const kws = ['ร้านอาหาร คิวยาว', 'บุฟเฟ่ต์ คิวเยอะ รอนาน', 'หมูกระทะ ชาบู รอคิว'];
+const Q_KWS = ['ร้านอาหาร คิวยาว', 'บุฟเฟ่ต์ คิวเยอะ รอนาน', 'หมูกระทะ ชาบู รอคิว'];
+async function qScanZone(z, gk){
   const found = [];
-  for(const kw of kws){
-    $('qStatus').textContent = 'กำลังค้น "'+kw+'" ในโซน '+z[0]+'…';
+  for(const kw of Q_KWS){
     const places = await gplacesSearch(kw, z[1], z[2], gk);
     places.forEach(pl=>{
       found.push({
@@ -1388,6 +1384,55 @@ async function qFetchGoogle(){
     });
   }
   return found;
+}
+function qGetKey(){
+  const gk = ($('inGKey').value || '').trim();
+  if(gk) store.set(GKEY_KEY, gk);
+  return gk;
+}
+async function qFetchGoogle(){
+  const gk = qGetKey();
+  if(!gk) throw new Error('ต้องใส่ Google Maps API key ก่อน (ช่องด้านบน) — โหมดนี้ยิง Places API ตรง');
+  const z = Q_ZONES[Number($('qZone').value)];
+  $('qStatus').textContent = 'กำลังค้นโซน '+z[0]+'…';
+  return qScanZone(z, gk);
+}
+let qSweepRun = false;
+async function qSweepAll(){
+  const btn = $('btnQSweep');
+  if(qSweepRun){ qSweepRun = false; btn.textContent = 'กำลังหยุด…'; return; }
+  const gk = qGetKey();
+  if(!gk){ $('qErr').textContent = 'ต้องใส่ Google Maps API key ก่อน — ปุ่มนี้ยิง Places API ครบทุกโซน'; $('qErr').style.display = 'block'; return; }
+  qSweepRun = true;
+  $('qErr').style.display = 'none';
+  $('btnQAi').disabled = true; $('btnQGoogle').disabled = true;
+  let added = 0, fails = 0, lastErr = '';
+  try{
+    for(let i = 0; i < Q_ZONES.length; i++){
+      if(!qSweepRun) break;
+      const z = Q_ZONES[i];
+      btn.textContent = 'หยุดสแกน (โซน '+(i+1)+'/'+Q_ZONES.length+')';
+      $('qStatus').textContent = 'สแกนโซน '+(i+1)+'/'+Q_ZONES.length+': '+z[0]+'…';
+      try{
+        const items = await qScanZone(z, gk);
+        const d = loadQData();
+        added += mergeQItems(d.items, items);
+        d.updated = Date.now();
+        saveQData(d); redrawQMarkers();
+        cloudPushQ(items).catch(()=>{});
+      }catch(e){ fails++; lastErr = String(e.message||e); }
+      await new Promise(r=>setTimeout(r, 250));
+    }
+    const done = qSweepRun;
+    $('qStatus').textContent = (done ? 'สแกนครบทุกโซนแล้ว' : 'หยุดสแกนตามสั่ง')
+      + ' — เพิ่มใหม่ '+added+' ร้าน รวมทั้งหมด '+loadQData().items.length+' ร้าน'
+      + (fails ? (' • ค้นไม่สำเร็จ '+fails+' โซน ('+lastErr.slice(0,80)+') — เลือกโซนนั้นแล้วกดสแกนเฉพาะโซนซ้ำ') : '');
+    updateSyncBadge();
+  } finally {
+    qSweepRun = false;
+    btn.textContent = 'สแกนทุกโซนอัตโนมัติ (20 โซน)';
+    $('btnQAi').disabled = false; $('btnQGoogle').disabled = false;
+  }
 }
 
 /* ---------- ปุ่ม/อีเวนต์หน้า 2 ---------- */
@@ -1420,6 +1465,7 @@ function switchTab(which){
 $('tabScan').addEventListener('click', ()=>switchTab('scan'));
 $('tabQueue').addEventListener('click', ()=>switchTab('queue'));
 $('btnQAi').addEventListener('click', ()=> runQFetch($('btnQAi'), qFetchAI));
+$('btnQSweep').addEventListener('click', qSweepAll);
 $('btnQGoogle').addEventListener('click', ()=> runQFetch($('btnQGoogle'), qFetchGoogle));
 $('qBuffetOnly').addEventListener('change', redrawQMarkers);
 $('btnQAnalyze').addEventListener('click', async ()=>{
