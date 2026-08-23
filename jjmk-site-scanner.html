@@ -212,6 +212,12 @@
   .qrow .rv{float:right;color:#8fd3a5;font-family:'Kanit';font-size:13px}
   .qrow .d{font-size:13px;color:var(--ash);margin-top:2px}
   .leaflet-container{font-family:'Sarabun'}
+  .qact{margin-top:6px}
+  .qmini{display:inline-block;background:var(--charcoal);border:1px solid var(--line);color:var(--paper);
+    font-family:'Kanit';font-size:12.5px;padding:4px 12px;border-radius:8px;cursor:pointer;margin-right:8px;text-decoration:none}
+  .qmini:active{background:rgba(229,72,77,.15)}
+  .qrev{margin-top:8px;border-top:1px dashed var(--line);padding-top:6px}
+  .qrv-item{background:var(--charcoal);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:6px 0;font-size:13.5px}
 </style>
 </head>
 <body>
@@ -349,12 +355,17 @@
       </div>
       <div class="err" id="qErr"></div>
       <div class="muted" id="qStatus" style="margin-top:6px"></div>
+      <div class="qbtnrow">
+        <button class="qbtn" id="btnQAnalyze">วิเคราะห์ข้อมูลทั้งหมดด้วย AI</button>
+        <button class="qbtn alt" id="btnQExport">ดาวน์โหลดข้อมูล (.json)</button>
+      </div>
+      <div id="qAnalysisOut" class="verdict" style="display:none;white-space:pre-wrap"></div>
       <div id="qList"></div>
       <button class="settings-toggle" id="btnQClear">ล้างข้อมูลร้านคิวยาวทั้งหมด</button>
     </section>
   </div>
 
-  <footer>JJ Site Scanner v2.3 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v2.4 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -1013,12 +1024,14 @@ async function cloudPushQ(items){
   if(!items || !items.length) return;
   return sbFetch('jj3_queue_spots?on_conflict=key', {method:'POST', headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},
     body: JSON.stringify(items.map(it=>({key:qKeyOf(it), name:it.name, lat:it.lat, lng:it.lng, zone:it.zone||'', type:it.type||'',
-      queue_evidence:it.queue_evidence||'', rating:String(it.rating||''), reviews:(Number(it.reviews)||null), url:it.url||'', src:it.src||''})))});
+      queue_evidence:it.queue_evidence||'', rating:String(it.rating||''), reviews:(Number(it.reviews)||null), url:it.url||'', src:it.src||'',
+      pid:it.pid||'', rv:(it.rv&&it.rv.length? it.rv : null)})))});
 }
 async function cloudPullQ(){
   const rows = await sbFetch('jj3_queue_spots?select=*&limit=3000', {method:'GET'});
   return (rows||[]).map(x=>({name:x.name, lat:Number(x.lat), lng:Number(x.lng), zone:x.zone||'', type:x.type||'',
-    queue_evidence:x.queue_evidence||'', rating:x.rating||'', reviews:x.reviews||'', url:x.url||'', src:x.src||''}));
+    queue_evidence:x.queue_evidence||'', rating:x.rating||'', reviews:x.reviews||'', url:x.url||'', src:x.src||'',
+    pid:x.pid||'', rv:(x.rv||null)}));
 }
 function updateSyncBadge(){
   const el = $('sbStatus'); if(!el) return;
@@ -1161,15 +1174,76 @@ function redrawQMarkers(){
 }
 function renderQList(items, mks){
   const sorted = items.slice().sort((a,b)=>(Number(b.reviews)||0)-(Number(a.reviews)||0));
-  $('qList').innerHTML = sorted.map(it=>(
-    '<div class="qrow" data-k="'+esc(qKeyOf(it))+'" data-lat="'+it.lat+'" data-lng="'+it.lng+'">'+
-    '<span class="rv">'+(it.reviews? Number(it.reviews).toLocaleString()+' รีวิว':'')+(it.rating? ' • '+it.rating+'★':'')+'</span>'+
-    '<b>'+esc(it.name)+'</b>'+
-    '<div class="d">'+esc(it.zone||'')+(it.type?' • '+esc(it.type):'')+' — '+esc(it.queue_evidence||'')+'</div></div>'
-  )).join('');
+  $('qList').innerHTML = sorted.map(it=>{
+    const k = esc(qKeyOf(it));
+    return '<div class="qrow" data-k="'+k+'" data-lat="'+it.lat+'" data-lng="'+it.lng+'">'+
+      '<span class="rv">'+(it.reviews? Number(it.reviews).toLocaleString()+' รีวิว':'')+(it.rating? ' • '+it.rating+'★':'')+'</span>'+
+      '<b>'+esc(it.name)+'</b>'+
+      '<div class="d">'+esc(it.zone||'')+(it.type?' • '+esc(it.type):'')+' — '+esc(it.queue_evidence||'')+'</div>'+
+      '<div class="qact"><button class="qmini" data-rvbtn="'+k+'">อ่านรีวิว</button>'+
+      '<a class="qmini" target="_blank" rel="noopener" href="'+esc(gmapsLink(it))+'">เปิดใน Google Maps</a></div>'+
+      '<div class="qrev" data-rvpanel="'+k+'" style="display:none"></div>'+
+    '</div>';
+  }).join('');
   $('qList').querySelectorAll('.qrow').forEach(el=>{
-    el.addEventListener('click', ()=> panQTo(Number(el.getAttribute('data-lat')), Number(el.getAttribute('data-lng')), null));
+    el.addEventListener('click', e=>{
+      if(e.target.closest('.qmini') || e.target.closest('.qrev')) return;
+      panQTo(Number(el.getAttribute('data-lat')), Number(el.getAttribute('data-lng')), null);
+    });
   });
+  $('qList').querySelectorAll('[data-rvbtn]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const k = btn.getAttribute('data-rvbtn');
+      const panel = $('qList').querySelector('[data-rvpanel="'+k.replace(/"/g,'\\"')+'"]');
+      if(panel) toggleReviews(k, panel);
+    });
+  });
+}
+function rvHtml(it){
+  const head = '<div class="d">คะแนนรวม '+esc(it.rating||'-')+'★ จากทั้งหมด '+(it.reviews? Number(it.reviews).toLocaleString():'-')+' รีวิว — API ของ Google ให้ข้อความรีวิวเด่นสูงสุด 5 รายการ/ร้าน อ่านครบทุกรีวิวที่ปุ่ม "เปิดใน Google Maps"</div>';
+  const body = (it.rv||[]).map(r=>(
+    '<div class="qrv-item"><b>'+esc(r.r)+'★</b> · '+esc(r.t||'')+'<br>'+esc(r.x||'')+'<div class="d">— '+esc(r.a||'ผู้ใช้ Google')+'</div></div>'
+  )).join('');
+  return head + (body || '<div class="d">ร้านนี้ไม่มีข้อความรีวิวส่งมาจาก API</div>');
+}
+async function gplaceDetails(pid, gk){
+  const res = await fetch('https://places.googleapis.com/v1/places/'+encodeURIComponent(pid), {
+    headers:{'X-Goog-Api-Key':gk, 'X-Goog-FieldMask':'rating,userRatingCount,reviews'}
+  });
+  if(!res.ok){ let m=''; try{ const j=await res.json(); m=(j.error&&j.error.message)||''; }catch(e){}
+    throw new Error('Place Details '+res.status+(m?' — '+m:'')); }
+  return res.json();
+}
+async function toggleReviews(k, panel){
+  if(panel.style.display === 'block'){ panel.style.display='none'; return; }
+  panel.style.display = 'block';
+  const d = loadQData();
+  const it = d.items.find(x=>qKeyOf(x)===k);
+  if(!it){ panel.innerHTML = '<div class="d">ไม่พบข้อมูลร้าน</div>'; return; }
+  if(it.rv && it.rv.length){ panel.innerHTML = rvHtml(it); return; }
+  const gk = (($('inGKey').value||'').trim()) || ((store.get(GKEY_KEY)||'').trim());
+  if(!gk){ panel.innerHTML = '<div class="d">การดึงข้อความรีวิวต้องมี Google Maps API key (ช่องด้านบน) — ระหว่างนี้กด "เปิดใน Google Maps" อ่านได้เลย</div>'; return; }
+  panel.innerHTML = '<div class="d">กำลังดึงรีวิว…</div>';
+  try{
+    if(!it.pid){
+      const cand = await gplacesSearch(it.name, Number(it.lat), Number(it.lng), gk);
+      if(!cand.length || !cand[0].id) throw new Error('หา place id ของร้านนี้ไม่เจอ — ลองสแกนโซนนี้ใหม่');
+      it.pid = cand[0].id;
+    }
+    const det = await gplaceDetails(it.pid, gk);
+    if(det.rating) it.rating = det.rating;
+    if(det.userRatingCount) it.reviews = det.userRatingCount;
+    it.rv = (det.reviews||[]).slice(0,5).map(r=>({
+      r: r.rating||'', t: r.relativePublishTimeDescription||'',
+      x: (r.text&&r.text.text) || (r.originalText&&r.originalText.text) || '',
+      a: (r.authorAttribution&&r.authorAttribution.displayName) || ''
+    }));
+    saveQData(d);
+    cloudPushQ([it]).catch(()=>{});
+    panel.innerHTML = rvHtml(it);
+  }catch(err){
+    panel.innerHTML = '<div class="d">ดึงรีวิวไม่สำเร็จ: '+esc(err.message||err)+'</div>';
+  }
 }
 
 /* ---------- โหมด AI: กวาดรีวิว/บทความด้วย key เดิม ---------- */
@@ -1190,7 +1264,7 @@ async function gplacesSearch(q, lat, lng, gk){
     headers:{
       'Content-Type':'application/json',
       'X-Goog-Api-Key': gk,
-      'X-Goog-FieldMask':'places.displayName,places.location,places.rating,places.userRatingCount,places.formattedAddress,places.googleMapsUri,places.primaryTypeDisplayName'
+      'X-Goog-FieldMask':'places.id,places.displayName,places.location,places.rating,places.userRatingCount,places.formattedAddress,places.googleMapsUri,places.primaryTypeDisplayName'
     },
     body: JSON.stringify({ textQuery:q, languageCode:'th', regionCode:'TH', maxResultCount:20,
       locationBias:{circle:{center:{latitude:lat, longitude:lng}, radius:5000}} })
@@ -1215,6 +1289,7 @@ async function qFetchGoogle(){
     const places = await gplacesSearch(kw, z[1], z[2], gk);
     places.forEach(pl=>{
       found.push({
+        pid: pl.id || '',
         name: (pl.displayName && pl.displayName.text) || '',
         lat: pl.location && pl.location.latitude, lng: pl.location && pl.location.longitude,
         zone: z[0], type: (pl.primaryTypeDisplayName && pl.primaryTypeDisplayName.text) || '',
@@ -1258,6 +1333,36 @@ $('tabQueue').addEventListener('click', ()=>switchTab('queue'));
 $('btnQAi').addEventListener('click', ()=> runQFetch($('btnQAi'), qFetchAI));
 $('btnQGoogle').addEventListener('click', ()=> runQFetch($('btnQGoogle'), qFetchGoogle));
 $('qBuffetOnly').addEventListener('change', redrawQMarkers);
+$('btnQAnalyze').addEventListener('click', async ()=>{
+  const items = loadQData().items;
+  if(!items.length){ alert('ยังไม่มีข้อมูล — กดรวบรวมด้านบนก่อน'); return; }
+  const btn = $('btnQAnalyze'); btn.disabled = true; const t0 = btn.textContent; btn.textContent = 'กำลังวิเคราะห์…';
+  $('qErr').style.display = 'none';
+  try{
+    const lines = items.slice(0, 150).map(it=>{
+      let s = (it.name||'')+' | '+(it.zone||'')+' | '+(it.type||'-')+' | '+(it.reviews||'?')+' รีวิว '+(it.rating||'')+'★ | '+(it.queue_evidence||'');
+      if(it.rv && it.rv.length){ s += ' | เสียงลูกค้า: '+it.rv.slice(0,2).map(r=>String(r.x||'').replace(/\s+/g,' ').slice(0,110)).join(' / '); }
+      return s;
+    }).join('\n');
+    const p = 'คุณคือนักวิเคราะห์ธุรกิจร้านอาหารของ "จริงใจหมูกระทะ" (บุฟเฟต์หมูกระทะ+ชาบูในโต๊ะเดียว 239/329+ชุดน้ำ 59 เปิด 11:00-02:00 มี 2 สาขา: ลาดพร้าววังหิน ~4 ลบ./เดือน และรัชดา 7.5 ลบ.เดือนแรก กำลังหาทำเลสาขา 3 แบบ 350-500 ตรม. จอด 30+ คัน เพดานเช่า 150-200K)\n\nข้อมูลร้านคิวยาวที่รวบรวมจาก Google Maps ('+items.length+' ร้าน) รูปแบบ: ชื่อ | โซน | หมวด | รีวิว | หลักฐานคิว | เสียงลูกค้า\n'+lines+'\n\nวิเคราะห์เป็นภาษาไทย กระชับ เป็นหัวข้อ:\n1) จุดร่วมของร้านคิวยาวชุดนี้ (หมวดไหนครอง ราคา ช่วงเวลา รูปแบบร้าน)\n2) จัดอันดับโซนตามความหนาแน่นของ demand จากข้อมูลนี้\n3) ช่องว่างของ "หมูกระทะ+ชาบูในโต๊ะเดียว format ใหญ่": โซนที่คิวยาวเยอะแต่ยังไม่มีคู่แข่งสายตรง\n4) บทเรียนจากเสียงลูกค้า: อะไรทำให้คนยอมต่อคิว อะไรที่คนบ่น — จริงใจควรทำ/เลี่ยงอะไร\n5) ข้อเสนอ 3 ข้อที่ลงมือได้จริงสำหรับสาขา 3\nอิงเฉพาะข้อมูลที่ให้ ถ้าข้อมูลบางโซนน้อยให้บอกว่ายังสแกนไม่พอ ห้ามกุตัวเลข';
+    const out = await apiCall({ model: MODEL_NAME, max_tokens: 4000, messages: [{role:'user', content: p}] });
+    $('qAnalysisOut').textContent = out.text.trim();
+    $('qAnalysisOut').style.display = 'block';
+    $('qAnalysisOut').scrollIntoView({behavior:'smooth', block:'start'});
+  }catch(err){
+    $('qErr').textContent = 'วิเคราะห์ไม่สำเร็จ: '+(err.message||err); $('qErr').style.display = 'block';
+  }finally{ btn.disabled = false; btn.textContent = t0; }
+});
+$('btnQExport').addEventListener('click', ()=>{
+  const d = loadQData();
+  if(!d.items.length){ alert('ยังไม่มีข้อมูลให้ดาวน์โหลด'); return; }
+  const blob = new Blob([JSON.stringify(d, null, 1)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const dt = new Date(), pad = n => String(n).padStart(2,'0');
+  a.download = 'jj3-queue-data-'+dt.getFullYear()+pad(dt.getMonth()+1)+pad(dt.getDate())+'.json';
+  a.click(); URL.revokeObjectURL(a.href);
+});
 $('btnQClear').addEventListener('click', ()=>{
   if(!confirm('ล้างข้อมูลร้านคิวยาวทั้งหมด?')) return;
   store.del(QMAP_KEY); redrawQMarkers();
