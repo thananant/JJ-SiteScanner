@@ -242,8 +242,8 @@
   </header>
 
   <div class="tabbar">
-    <div class="tab active" id="tabScan">สแกนทำเล</div>
     <div class="tab" id="tabQueue">แผนที่ร้านคิวยาว</div>
+    <div class="tab" id="tabScan">สแกนทำเล</div>
   </div>
 
   <div id="pageScan">
@@ -371,7 +371,6 @@
         </div>
       </div>
       <div id="qSearchRes"></div>
-      <label style="margin-top:10px"><input type="checkbox" id="qBuffetOnly" style="width:auto;margin-right:8px">แสดงเฉพาะสายบุฟเฟต์ / ชาบู / หมูกระทะ / ปิ้งย่าง</label>
       <div class="hint">
         • ปุ่ม AI: ใช้ Anthropic key เดิม ไปกวาดรีวิว Google Maps + บทความ หาร้านที่คนพูดว่า "คิวยาว คิวเยอะ รอนาน คนเยอะ" ทั่ว กทม.+ปริมณฑล (~1–2 นาที)<br>
         • ปุ่มสแกนทุกโซน: ไล่ค้นครบ 20 โซนอัตโนมัติใน ~2–3 นาที (~60 ครั้ง/รอบ จากโควตาฟรี ~5,000 ครั้ง/เดือน) กดซ้ำเพื่อหยุดกลางทางได้ — แนะนำรันซ้ำสัปดาห์ละครั้งเพื่อให้ระบบคำนวณอัตรารีวิวเพิ่ม<br>
@@ -387,6 +386,10 @@
       <div id="qZoneChips"></div>
       <div class="qf-label">กรองระดับหมุด</div>
       <div id="qTierChips"></div>
+      <div class="qf-label">กรองหมวดร้าน</div>
+      <div id="qCatChips"></div>
+      <div class="qf-label">สถานะการสืบประวัติ (AI)</div>
+      <div id="qDeepChips"></div>
       <div class="grid2">
         <div>
           <label>แสดงเฉพาะคะแนนรีวิวต่ำกว่า</label>
@@ -398,7 +401,16 @@
             <option value="4.7">ต่ำกว่า 4.7★</option>
           </select>
         </div>
-        <div></div>
+        <div>
+          <label>เรียงรายการตาม</label>
+          <select id="qSort">
+            <option value="rv">รีวิวมาก → น้อย</option>
+            <option value="rate_asc">คะแนนน้อย → มาก (หาเจ้าถิ่นที่อ่อนแอ)</option>
+            <option value="rate_desc">คะแนนมาก → น้อย</option>
+            <option value="hot">มาแรงสุด — อัตรารีวิวเพิ่ม/สัปดาห์</option>
+            <option value="new">ร้านใหม่ก่อน (จากรีวิวเก่าสุดที่เห็น)</option>
+          </select>
+        </div>
       </div>
       <div class="muted" id="qStatus" style="margin-top:6px"></div>
       <button class="qmini" id="btnQResetFilter" style="margin-top:6px">รีเซ็ตตัวกรองทั้งหมด (จุดหาย? กดนี่ก่อน)</button>
@@ -425,7 +437,7 @@
     </section>
   </div>
 
-  <footer>JJ Site Scanner v3.7 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v3.8 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -1192,14 +1204,24 @@ function qTier(it){
   if(n >= 200)  return {c:'#58a66e', t:'200–499 รีวิว', k:'g'};
   return null; // ต่ำกว่า 200 หรือไม่ทราบ — ไม่ปักหมุด
 }
-const qFilter = { zones: new Set(), tiers: new Set(['r','y','g']), maxR: 0, text: '' };
+const qFilter = { zones: new Set(), tiers: new Set(['r','y','g']), maxR: 0, text: '',
+  cats: new Set(['mk','sb','bf','other']), deep: 'all', sort: 'rv' };
+function qCat(it){
+  const s = ((it.name||'')+' '+(it.type||'')).toLowerCase();
+  if(/หมูกระทะ|ปิ้งย่าง|ย่างเกาหลี|yakiniku|grill|bbq|เนื้อย่าง/.test(s)) return 'mk';
+  if(/ชาบู|สุกี|shabu|suki|hotpot|จิ้มจุ่ม|หม้อไฟ/.test(s)) return 'sb';
+  if(/บุฟเฟ|buffet/.test(s)) return 'bf';
+  return 'other';
+}
 function qApplyFilter(items){
   return items.filter(it=>{
     if(qFilter.text){
       const hay = ((it.name||'')+' '+(it.type||'')+' '+(it.zone||'')).toLowerCase();
       if(hay.indexOf(qFilter.text) === -1) return false;
     }
-    if($('qBuffetOnly').checked && !BUFFET_RE.test((it.name||'')+' '+(it.type||''))) return false;
+    if(!qFilter.cats.has(qCat(it))) return false;
+    if(qFilter.deep === 'done' && !(it.deep && it.deep.pros)) return false;
+    if(qFilter.deep === 'todo' && (it.deep && it.deep.pros)) return false;
     if(qFilter.zones.size && !qFilter.zones.has(it.zone||'ไม่ระบุโซน')) return false;
     const t = qTier(it);
     if(t){ if(!qFilter.tiers.has(t.k)) return false; }
@@ -1272,6 +1294,46 @@ function buildBrands(items){
     const avg = rs.length ? rs.reduce((t,x)=>t+x,0)/rs.length : 0;
     return {name, items:arr, total, avg, n:arr.length};
   }).sort((a,b)=>b.total-a.total);
+}
+function bindCatChips(){
+  const defs = [['mk','หมูกระทะ / ปิ้งย่าง'],['sb','ชาบู / สุกี้'],['bf','บุฟเฟต์อื่น'],['other','ร้านอื่นๆ']];
+  $('qCatChips').innerHTML = defs.map(d=>'<span class="fchip'+(qFilter.cats.has(d[0])?' on':'')+'" data-cat="'+d[0]+'">'+d[1]+'</span>').join('');
+  $('qCatChips').querySelectorAll('[data-cat]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const c = el.getAttribute('data-cat');
+      if(qFilter.cats.has(c)){ if(qFilter.cats.size > 1){ qFilter.cats.delete(c); el.classList.remove('on'); } }
+      else { qFilter.cats.add(c); el.classList.add('on'); }
+      redrawQMarkers();
+    });
+  });
+}
+function bindDeepChips(){
+  const defs = [['all','ทั้งหมด'],['done','✓ สืบแล้ว'],['todo','ยังไม่สืบ']];
+  $('qDeepChips').innerHTML = defs.map(d=>'<span class="fchip'+(qFilter.deep===d[0]?' on':'')+'" data-deepf="'+d[0]+'">'+d[1]+'</span>').join('');
+  $('qDeepChips').querySelectorAll('[data-deepf]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      qFilter.deep = el.getAttribute('data-deepf');
+      bindDeepChips();
+      redrawQMarkers();
+    });
+  });
+}
+function qRateWeek(it){
+  const h = it.hist||[];
+  if(h.length < 2) return -1;
+  const a = h[0], b = h[h.length-1];
+  const days = Math.max(1, (b.t - a.t)/86400000);
+  return (b.n - a.n)/days*7;
+}
+function qSortArr(arr){
+  const s = qFilter.sort;
+  return arr.slice().sort((a,b)=>{
+    if(s === 'rate_asc')  return (Number(a.rating)||99) - (Number(b.rating)||99);
+    if(s === 'rate_desc') return (Number(b.rating)||0) - (Number(a.rating)||0);
+    if(s === 'hot')       return qRateWeek(b) - qRateWeek(a);
+    if(s === 'new')       return (rvOldest(b)||0) - (rvOldest(a)||0);
+    return (Number(b.reviews)||0) - (Number(a.reviews)||0);
+  });
 }
 function bindTierChips(){
   $('qTierChips').innerHTML =
@@ -1431,7 +1493,7 @@ function renderQList(items, mks){
     $('qList').innerHTML = groups.map(gr=>(
       '<div class="qzone-head">'+esc(gr.name)+sub(
         gr.n+' สาขาในเรดาร์ • รวม '+gr.total.toLocaleString()+' รีวิว'+(gr.avg? ' • เฉลี่ย '+gr.avg.toFixed(1)+'★':'')
-      )+'</div>' + gr.items.map(rowHtml).join('')
+      )+'</div>' + qSortArr(gr.items).map(rowHtml).join('')
     )).join('');
   } else {
     const gz = {};
@@ -1439,7 +1501,7 @@ function renderQList(items, mks){
     const zsum = z => gz[z].reduce((t,x)=>t+(Number(x.reviews)||0), 0);
     const zones = Object.keys(gz).sort((a,b)=>zsum(b)-zsum(a));
     $('qList').innerHTML = zones.map(z=>{
-      const arr = gz[z].slice().sort((a,b)=>(Number(b.reviews)||0)-(Number(a.reviews)||0));
+      const arr = qSortArr(gz[z]);
       return '<div class="qzone-head">'+esc(z)+sub(arr.length+' ร้าน • รวม '+zsum(z).toLocaleString()+' รีวิว')+'</div>'
         + arr.map(rowHtml).join('');
     }).join('');
@@ -2041,15 +2103,20 @@ $('btnQResetFilter').addEventListener('click', ()=>{
   qFilter.tiers = new Set(['r','y','g']);
   qFilter.maxR = 0;
   $('qMaxRating').value = '0';
-  $('qBuffetOnly').checked = false;
+  qFilter.cats = new Set(['mk','sb','bf','other']);
+  qFilter.deep = 'all';
+  qFilter.sort = 'rv';
+  $('qSort').value = 'rv';
   bindTierChips();
+  bindCatChips();
+  bindDeepChips();
   redrawQMarkers();
 });
 $('inGKey') && $('qSearchName').addEventListener('keydown', e=>{ if(e.key==='Enter') qSearchPlaces(); });
 $('btnOwnFetch').addEventListener('click', ownFetch);
 $('btnOwnAnalyze').addEventListener('click', ownAnalyze);
 $('btnQGoogle').addEventListener('click', ()=> runQFetch($('btnQGoogle'), qFetchGoogle));
-$('qBuffetOnly').addEventListener('change', redrawQMarkers);
+$('qSort').addEventListener('change', ()=>{ qFilter.sort = $('qSort').value; redrawQMarkers(); });
 $('qHeatOn').addEventListener('change', redrawQMarkers);
 $('btnQDeepAll').addEventListener('click', qDeepAll);
 document.addEventListener('click', e=>{
@@ -2138,8 +2205,10 @@ $('btnSbSync').addEventListener('click', ()=>{
   $('qZone').innerHTML = Q_ZONES.map((z,i)=>'<option value="'+i+'">'+esc(z[0])+'</option>').join('');
   bindViewChips();
   bindTierChips();
+  bindCatChips();
+  bindDeepChips();
   try{ const own = JSON.parse(store.get(OWN_KEY)||'null'); if(own && own.lp) renderOwn(own); }catch(e){}
-  if(store.get('jj3_tab') === 'queue') switchTab('queue');
+  switchTab(store.get('jj3_tab') === 'scan' ? 'scan' : 'queue');
   $('qMaxRating').addEventListener('change', ()=>{ qFilter.maxR = Number($('qMaxRating').value)||0; redrawQMarkers(); });
   let qSearchT = null;
   $('qListSearch').addEventListener('input', ()=>{
