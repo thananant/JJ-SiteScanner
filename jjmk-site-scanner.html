@@ -249,9 +249,10 @@
       <label>Anthropic API key</label>
       <input id="inApiKey" type="password" placeholder="sk-ant-..." autocomplete="off">
       <div class="hint">
-        • เปิดผ่านหน้า Claude.ai (artifact) — ไม่ต้องใส่ key ระบบจัดการให้<br>
-        • เปิดจากไฟล์บน GitHub Pages / เครื่องตัวเอง — ต้องใส่ key ของตัวเอง (เก็บไว้ในเครื่องนี้เท่านั้น ไม่ถูกส่งไปที่อื่นนอกจาก Anthropic)<br>
-        • แต่ละสแกนใช้เวลา ~1–2 นาที และมีค่าใช้จ่าย API ตามจำนวนการค้นเว็บ (~4–8 ครั้ง/สแกน)
+        <b>วิธีเอา key (ทำครั้งเดียว):</b> เข้า platform.claude.com → สมัคร/ล็อกอิน Console (คนละบัญชีกับแอป Claude — แพ็กเกจ Pro/Max ใช้แทนไม่ได้) → เมนู Billing เติมเครดิต → เมนู API Keys → Create Key → คัดลอกทั้งเส้น (ขึ้นต้น sk-ant-) มาวางช่องบนแล้วสแกนได้เลย<br>
+        • เปิดผ่านหน้า Claude โดยตรง — ไม่ต้องใส่ key ระบบจัดการให้<br>
+        • เปิดบน GitHub Pages / เปิดไฟล์เอง — ต้องใส่ key เสมอ (key เก็บในเครื่องนี้เท่านั้น และส่งตรงหา Anthropic ที่เดียว)<br>
+        • ค่าใช้จ่ายต่อสแกน: ค้นเว็บสูงสุด 10 ครั้ง + โทเคน รวมราวหลักบาทถึง ~10 บาท ใช้เวลา ~1–2 นาที
       </div>
     </div>
     <div class="err" id="errBox"></div>
@@ -277,7 +278,7 @@
     <button class="settings-toggle" id="btnClearHist">ล้างประวัติทั้งหมด</button>
   </section>
 
-  <footer>JJ Site Scanner v1.2 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v1.3 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -549,6 +550,9 @@ D1 ความหนาแน่นประชากร/catchment | D2 ปร�
 /* ========== เรียก Anthropic API ========== */
 async function callClaude(prompt){
   const key = ($('inApiKey').value || '').trim();
+  if(key && key.indexOf('sk-ant-') !== 0){
+    throw new Error('รูปแบบ key ไม่ถูกต้อง — key จริงจาก platform.claude.com จะขึ้นต้นด้วย sk-ant- (อย่าใช้รหัสผ่าน/บัญชีแอป Claude)');
+  }
   const headers = {'Content-Type':'application/json'};
   if(key){
     headers['x-api-key'] = key;
@@ -569,11 +573,19 @@ async function callClaude(prompt){
       })
     });
     if(!res.ok){
-      let msg = 'HTTP ' + res.status;
-      try{ const j = await res.json(); msg += ' — ' + (j.error && j.error.message || ''); }catch(e){}
-      if(res.status === 401) msg += ' | ถ้ารันบน GitHub Pages/เครื่องตัวเอง ต้องใส่ API key ในตั้งค่าก่อน';
-      if(res.status === 429) msg += ' | ยิงถี่เกิน rate limit — รอสักครู่แล้วลองใหม่';
-      if(res.status >= 500) msg += ' | ฝั่ง Anthropic หนาแน่น — ลองใหม่อีกครั้ง';
+      let apiMsg = '';
+      try{ const j = await res.json(); apiMsg = (j.error && j.error.message) || ''; }catch(e){}
+      let msg = 'HTTP ' + res.status + (apiMsg ? ' — ' + apiMsg : '');
+      if(res.status === 401){
+        msg = !key
+          ? 'ยังไม่ได้ใส่ API key — การรันนอกหน้า Claude (GitHub Pages/เปิดไฟล์เอง) ต้องใช้ key เสมอ: กด "ตั้งค่า API key" ด้านล่างปุ่มสแกน แล้ววาง key จาก platform.claude.com/settings/keys'
+          : 'API key ไม่ถูกต้อง — เช็คว่า (1) เป็น key จาก platform.claude.com (Console) ไม่ใช่บัญชีแอป Claude (2) คัดลอกครบทั้งเส้นไม่มีช่องว่าง (3) key ยังไม่ถูกลบ/ปิดใช้งาน';
+      }
+      else if(res.status === 400 && /credit|billing|balance/i.test(apiMsg)){
+        msg = 'เครดิต API ไม่พอ — บัญชี Console แยกจากแพ็กเกจ Claude Pro/Max ต้องเติมเครดิตที่ platform.claude.com เมนู Billing ก่อนใช้งาน';
+      }
+      else if(res.status === 429) msg += ' | ยิงถี่เกิน rate limit — รอสักครู่แล้วลองใหม่';
+      else if(res.status >= 500) msg += ' | ฝั่ง Anthropic หนาแน่น — ลองใหม่อีกครั้ง';
       throw new Error(msg);
     }
     const data = await res.json();
