@@ -287,7 +287,7 @@
       <input id="inSbKey" type="password" placeholder="eyJ..." autocomplete="off">
       <button class="settings-toggle" id="btnSbSync">บันทึก + ซิงก์เดี๋ยวนี้</button>
       <div class="hint" id="sbStatus"></div>
-      <div class="hint">ก่อนเชื่อมครั้งแรก: รันไฟล์ jj3-supabase-setup.sql ใน Supabase SQL Editor หนึ่งครั้ง (idempotent รันซ้ำได้) แล้วเอา URL + anon key จาก Project Settings › API มาวาง</div>
+      <div class="hint">URL + publishable key ตั้งค่ามาให้ครบแล้ว (โปรเจกต์ jjmk-stock) — ทำครั้งแรกครั้งเดียว: รันไฟล์ jj3-supabase-setup.sql ใน SQL Editor แล้วแอพจะซิงก์อัตโนมัติทุกเครื่องเอง • ช่องนี้แก้เฉพาะตอนย้ายโปรเจกต์ • ห้ามใช้ sb_secret_ ในแอพนี้เด็ดขาด</div>
     </div>
     <div class="err" id="errBox"></div>
   </section>
@@ -354,7 +354,7 @@
     </section>
   </div>
 
-  <footer>JJ Site Scanner v2.1 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v2.3 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -977,16 +977,23 @@ $('btnScan').addEventListener('click', async ()=>{
 
 /* ========== Supabase sync (เก็บถาวร ดูได้ทุกเครื่อง) ========== */
 const SBURL_KEY = 'jj3_sb_url', SBKEY_KEY = 'jj3_sb_key';
+const SB_DEFAULT_KEY = 'sb_publishable_Bn6BMtcjasoPT3RZ_ekyOg_SLWWp-nm';
+const SB_DEFAULT_URL = 'https://aikyxvluaiubdidqxwnd.supabase.co';
 let SYNC_STATE = 'off';
 function sbCfg(){
-  const u = (store.get(SBURL_KEY)||'').trim().replace(/\/+$/,'');
-  const k = (store.get(SBKEY_KEY)||'').trim();
+  const u = ((store.get(SBURL_KEY)||'').trim() || SB_DEFAULT_URL).replace(/\/+$/,'');
+  const k = (store.get(SBKEY_KEY)||'').trim() || SB_DEFAULT_KEY;
   return (u && k) ? {u,k} : null;
 }
 async function sbFetch(path, opt){
   const c = sbCfg(); if(!c) return null;
+  if(c.k.indexOf('sb_secret_') === 0){
+    throw new Error('ห้ามใช้ sb_secret_ ในแอพฝั่งเบราว์เซอร์เด็ดขาด — ใช้ sb_publishable_ หรือ anon key (eyJ...) เท่านั้น');
+  }
+  const base = {'apikey': c.k, 'Content-Type':'application/json'};
+  if(c.k.indexOf('eyJ') === 0){ base['Authorization'] = 'Bearer ' + c.k; } // เฉพาะ anon key แบบ JWT เดิมเท่านั้น
   const res = await fetch(c.u+'/rest/v1/'+path, Object.assign({}, opt, {
-    headers: Object.assign({'apikey':c.k,'Authorization':'Bearer '+c.k,'Content-Type':'application/json'}, (opt&&opt.headers)||{})
+    headers: Object.assign(base, (opt&&opt.headers)||{})
   }));
   if(!res.ok){ let m=''; try{ m = await res.text(); }catch(e){} throw new Error('Supabase '+res.status+' — '+m.slice(0,180)); }
   const t = await res.text(); return t ? JSON.parse(t) : null;
@@ -1270,8 +1277,8 @@ $('btnSbSync').addEventListener('click', ()=>{
 (function init(){
   const k = store.get(KEY_KEY); if(k) $('inApiKey').value = k;
   const gk = store.get(GKEY_KEY); if(gk) $('inGKey').value = gk;
-  const su = store.get(SBURL_KEY); if(su) $('inSbUrl').value = su;
-  const sk = store.get(SBKEY_KEY); if(sk) $('inSbKey').value = sk;
+  $('inSbUrl').value = store.get(SBURL_KEY) || SB_DEFAULT_URL;
+  $('inSbKey').value = store.get(SBKEY_KEY) || SB_DEFAULT_KEY;
   updateSyncBadge();
   syncFromCloud(false);
   $('qZone').innerHTML = Q_ZONES.map((z,i)=>'<option value="'+i+'">'+esc(z[0])+'</option>').join('');
