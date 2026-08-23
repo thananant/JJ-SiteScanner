@@ -208,6 +208,8 @@
   <!-- ============ ฟอร์มค้นหา ============ -->
   <section class="panel">
     <h2><span class="dot"></span>พื้นที่ที่จะสแกน</h2>
+    <label>ถนน / จุดสังเกต (แนะนำให้ใส่เป็นอันดับแรก — ช่วยให้สแกนแม่นขึ้นมาก)</label>
+    <input id="inLandmark" placeholder="เช่น ถนนรามอินทรา กม.8 ใกล้แฟชั่นไอส์แลนด์" autocomplete="off">
     <div class="grid2">
       <div class="sugg-wrap">
         <label>เขต / อำเภอ *</label>
@@ -230,9 +232,7 @@
         <div class="sugg" id="sgZip"></div>
       </div>
     </div>
-    <div class="hint">พิมพ์ช่องไหนก็ได้แล้วแตะเลือกจากรายการ — ระบบเติมให้ครบทุกช่องอัตโนมัติ (ครอบคลุม กทม. ครบ 50 เขต 180 แขวง + นนทบุรี ปทุมธานี สมุทรปราการ สมุทรสาคร นครปฐม ระดับตำบล • จังหวัดอื่นพิมพ์เองได้ตามปกติ)</div>
-    <label>ถนน / จุดสังเกต (ถ้ามี — ช่วยให้สแกนแม่นขึ้นมาก)</label>
-    <input id="inLandmark" placeholder="เช่น ถนนรามอินทรา กม.8 ใกล้แฟชั่นไอส์แลนด์" autocomplete="off">
+    <div class="hint">พิมพ์ช่องไหนก็ได้แล้วแตะเลือกจากรายการ — เลือกเขตแล้วรายการแขวงจะเด้งให้เลือกต่อทันที ระบบเติมครบทุกช่องอัตโนมัติ (ครอบคลุม กทม. ครบ 50 เขต 180 แขวง + นนทบุรี ปทุมธานี สมุทรปราการ สมุทรสาคร นครปฐม ระดับตำบล • จังหวัดอื่นพิมพ์เองได้ตามปกติ)</div>
     <label>รัศมีวิเคราะห์รอบจุดนี้</label>
     <select id="inRadius">
       <option value="2">2 กม.</option>
@@ -278,7 +278,7 @@
     <button class="settings-toggle" id="btnClearHist">ล้างประวัติทั้งหมด</button>
   </section>
 
-  <footer>JJ Site Scanner v1.3 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v1.4 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -468,6 +468,18 @@ function suggSearch(mode, q){
   }
   return res;
 }
+function subsOf(d, p, z){
+  let rows = AREAS.filter(a => a.d===d && a.s && (!z || a.z===z));
+  if(p){ const pr = rows.filter(a=>a.p===p); if(pr.length) rows = pr; }
+  const res=[], seen=new Set();
+  rows.forEach(a=>{ if(!seen.has(a.s)){ seen.add(a.s); res.push({a, main:a.s, sub:a.d+' • '+a.p+' • '+a.z}); } });
+  return res;
+}
+function distsOf(p){
+  const res=[], seen=new Set();
+  for(const a of AREAS){ if(a.p===p && !seen.has(a.d)){ seen.add(a.d); res.push({a, main:a.d, sub:a.p+' • '+a.z}); } }
+  return res;
+}
 function suggPick(mode, a){
   if(mode==='prov'){ $('inProvince').value = a.p; return; }
   $('inDistrict').value = a.d;
@@ -475,21 +487,45 @@ function suggPick(mode, a){
   $('inZip').value      = a.z;
   $('inSubdistrict').value = (mode==='sub') ? a.s : '';
 }
+function hideAllSugg(){ document.querySelectorAll('.sugg').forEach(b=>{ b.style.display='none'; }); }
+function showSuggBox(box, items, mode){
+  if(!items.length){ box.style.display='none'; box.innerHTML=''; return; }
+  box.innerHTML = items.map((it,i)=>'<div data-i="'+i+'">'+esc(it.main)+(it.sub?'<small>'+esc(it.sub)+'</small>':'')+'</div>').join('');
+  box.style.display='block';
+  box.querySelectorAll('div[data-i]').forEach(el=>{
+    el.addEventListener('mousedown', ev=>{ ev.preventDefault(); pickAndCascade(mode, items[Number(el.getAttribute('data-i'))].a); });
+  });
+}
+function pickAndCascade(mode, a){
+  suggPick(mode, a);
+  hideAllSugg();
+  if(mode==='prov'){ showSuggBox($('sgDist'), distsOf(a.p), 'dist'); }
+  else if(mode==='dist'){ showSuggBox($('sgSub'), subsOf(a.d, a.p, ''), 'sub'); }
+  else if(mode==='zip'){ showSuggBox($('sgSub'), subsOf(a.d, a.p, a.z), 'sub'); }
+}
 function attachSugg(inputId, boxId, mode){
   const inp = $(inputId), box = $(boxId);
   function show(){
-    const items = suggSearch(mode, inp.value);
-    if(!items.length){ box.style.display='none'; box.innerHTML=''; return; }
-    box.innerHTML = items.map((it,i)=>'<div data-i="'+i+'">'+esc(it.main)+(it.sub?'<small>'+esc(it.sub)+'</small>':'')+'</div>').join('');
-    box.style.display='block';
-    box.querySelectorAll('div[data-i]').forEach(el=>{
-      el.addEventListener('mousedown', ev=>{ ev.preventDefault(); suggPick(mode, items[Number(el.getAttribute('data-i'))].a); box.style.display='none'; });
-    });
+    const q = inp.value.trim();
+    let items;
+    if(mode==='sub' && !q){
+      const d = $('inDistrict').value.trim();
+      items = d ? subsOf(d, $('inProvince').value.trim(), '') : [];
+    } else if(mode==='dist' && !q){
+      const p = $('inProvince').value.trim();
+      items = p ? distsOf(p) : [];
+    } else {
+      items = suggSearch(mode, q);
+    }
+    showSuggBox(box, items, mode);
   }
   inp.addEventListener('input', show);
   inp.addEventListener('focus', show);
   inp.addEventListener('blur', ()=> setTimeout(()=>{ box.style.display='none'; }, 200));
 }
+document.addEventListener('mousedown', e=>{
+  if(!e.target.closest || !e.target.closest('.sugg-wrap')) hideAllSugg();
+});
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function haversine(lat1,lng1,lat2,lng2){
   const R=6371, toR=x=>x*Math.PI/180;
