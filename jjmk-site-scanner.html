@@ -219,6 +219,11 @@
   .qrev{margin-top:8px;border-top:1px dashed var(--line);padding-top:6px}
   .qrv-item{background:var(--charcoal);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:6px 0;font-size:13.5px}
   .tdot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:7px;vertical-align:-1px;border:1px solid rgba(255,255,255,.25)}
+  .qf-label{font-size:12.5px;color:var(--ash);margin:10px 0 4px;font-family:'Kanit'}
+  .fchip{display:inline-block;font-size:13px;padding:5px 12px;border-radius:99px;border:1px solid var(--line);
+    background:var(--surface2);cursor:pointer;user-select:none;margin:0 6px 6px 0}
+  .fchip.on{border-color:var(--emberA);background:rgba(229,72,77,.16);color:#ffd7d8}
+  .qzone-head{font-family:'Kanit';font-size:15.5px;color:#ffcf9e;margin:18px 0 4px;border-bottom:1px solid var(--line);padding-bottom:3px}
 </style>
 </head>
 <body>
@@ -360,6 +365,23 @@
         • ข้อมูลทั้งสองทางถูกรวมเข้าชุดเดียว จำไว้ในเครื่อง แตะหมุด/รายการเพื่อดูรายละเอียดและเปิดใน Google Maps
       </div>
       <div class="err" id="qErr"></div>
+      <div class="qf-label">กรองโซน — แตะเลือกได้หลายโซนพร้อมกัน</div>
+      <div id="qZoneChips"></div>
+      <div class="qf-label">กรองระดับหมุด</div>
+      <div id="qTierChips"></div>
+      <div class="grid2">
+        <div>
+          <label>แสดงเฉพาะคะแนนรีวิวต่ำกว่า</label>
+          <select id="qMaxRating">
+            <option value="0">ทุกคะแนน</option>
+            <option value="4.0">ต่ำกว่า 4.0★</option>
+            <option value="4.3">ต่ำกว่า 4.3★</option>
+            <option value="4.5">ต่ำกว่า 4.5★ (คิวยาวแต่ลูกค้าไม่ปลื้ม = ช่องแทรก)</option>
+            <option value="4.7">ต่ำกว่า 4.7★</option>
+          </select>
+        </div>
+        <div></div>
+      </div>
       <div class="muted" id="qStatus" style="margin-top:6px"></div>
       <div class="qbtnrow">
         <button class="qbtn" id="btnQAnalyze">วิเคราะห์ข้อมูลทั้งหมดด้วย AI</button>
@@ -371,7 +393,7 @@
     </section>
   </div>
 
-  <footer>JJ Site Scanner v2.8 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v2.9 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -1093,10 +1115,56 @@ function saveQData(d){ store.set(QMAP_KEY, JSON.stringify(d)); }
 function qKeyOf(it){ return (it.name||'') + '|' + Number(it.lat).toFixed(3) + '|' + Number(it.lng).toFixed(3); }
 function qTier(it){
   const n = Number(it.reviews)||0;
-  if(n >= 1000) return {c:'#e5484d', t:'&ge;1,000 รีวิว'};
-  if(n >= 500)  return {c:'#ffd23f', t:'500–999 รีวิว'};
-  if(n >= 200)  return {c:'#58a66e', t:'200–499 รีวิว'};
+  if(n >= 1000) return {c:'#e5484d', t:'&ge;1,000 รีวิว', k:'r'};
+  if(n >= 500)  return {c:'#ffd23f', t:'500–999 รีวิว', k:'y'};
+  if(n >= 200)  return {c:'#58a66e', t:'200–499 รีวิว', k:'g'};
   return null; // ต่ำกว่า 200 หรือไม่ทราบ — ไม่ปักหมุด
+}
+const qFilter = { zones: new Set(), tiers: new Set(['r','y','g']), maxR: 0 };
+function qApplyFilter(items){
+  return items.filter(it=>{
+    if($('qBuffetOnly').checked && !BUFFET_RE.test((it.name||'')+' '+(it.type||''))) return false;
+    if(qFilter.zones.size && !qFilter.zones.has(it.zone||'ไม่ระบุโซน')) return false;
+    const t = qTier(it);
+    if(t){ if(!qFilter.tiers.has(t.k)) return false; }
+    else if(qFilter.tiers.size < 3) return false; // เลือกกรองสี = ตัดพวกไม่มีระดับออกด้วย
+    if(qFilter.maxR){
+      const r = Number(it.rating)||0;
+      if(!(r > 0 && r < qFilter.maxR)) return false;
+    }
+    return true;
+  });
+}
+function renderZoneChips(allItems){
+  const counts = {};
+  allItems.forEach(it=>{ const z = it.zone||'ไม่ระบุโซน'; counts[z] = (counts[z]||0)+1; });
+  const zones = Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
+  let h = '<span class="fchip'+(qFilter.zones.size? '' : ' on')+'" data-zone="__all">ทุกโซน</span>';
+  h += zones.map(z=>'<span class="fchip'+(qFilter.zones.has(z)?' on':'')+'" data-zone="'+esc(z)+'">'+esc(z)+' ('+counts[z]+')</span>').join('');
+  $('qZoneChips').innerHTML = h;
+  $('qZoneChips').querySelectorAll('[data-zone]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const z = el.getAttribute('data-zone');
+      if(z === '__all') qFilter.zones.clear();
+      else { if(qFilter.zones.has(z)) qFilter.zones.delete(z); else qFilter.zones.add(z); }
+      redrawQMarkers();
+    });
+  });
+}
+function bindTierChips(){
+  $('qTierChips').innerHTML =
+    '<span class="fchip on" data-tier="r"><i class="tdot" style="background:#e5484d"></i>&ge;1,000 รีวิว</span>'+
+    '<span class="fchip on" data-tier="y"><i class="tdot" style="background:#ffd23f"></i>500–999</span>'+
+    '<span class="fchip on" data-tier="g"><i class="tdot" style="background:#58a66e"></i>200–499</span>';
+  $('qTierChips').querySelectorAll('[data-tier]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const t = el.getAttribute('data-tier');
+      if(qFilter.tiers.has(t)){
+        if(qFilter.tiers.size > 1){ qFilter.tiers.delete(t); el.classList.remove('on'); }
+      } else { qFilter.tiers.add(t); el.classList.add('on'); }
+      redrawQMarkers();
+    });
+  });
 }
 function snapPush(hist, it){
   const n = Number(it.reviews)||0, r = Number(it.rating)||null;
@@ -1191,8 +1259,9 @@ function redrawQMarkers(){
       addQMarker(x.lat, x.lng, '#6e8fb2', '<b>'+esc(x.area||'ทำเลที่สแกน')+'</b><br>เกรด '+esc(c.grade||x.grade||'-')+' • A '+(c.lpPct??'-')+'% / B '+(c.rdPct??'-')+'%');
     }
   });
-  const only = $('qBuffetOnly').checked;
-  const items = loadQData().items.filter(it => !only || BUFFET_RE.test((it.name||'')+' '+(it.type||'')));
+  const all = loadQData().items;
+  renderZoneChips(all);
+  const items = qApplyFilter(all);
   const mks = {};
   let plotted = 0;
   items.forEach(it=>{
@@ -1207,13 +1276,19 @@ function redrawQMarkers(){
   });
   renderQList(items, mks);
   const hidden = items.length - plotted;
-  $('qStatus').textContent = items.length
-    ? ('บนแผนที่ '+plotted+' ร้าน'+(hidden>0?(' • ซ่อน '+hidden+' ร้านที่ต่ำกว่า 200 รีวิว/ไม่ทราบยอด (ดูได้ในรายการ)'):'')+(loadQData().updated?(' • อัปเดต '+fmtDate(loadQData().updated)):''))
-    : 'ยังไม่มีข้อมูล — กดปุ่มรวบรวมด้านบนได้เลย';
+  if(!all.length){
+    $('qStatus').textContent = 'ยังไม่มีข้อมูล — กดปุ่มรวบรวมด้านบนได้เลย';
+  }else if(!items.length){
+    $('qStatus').textContent = 'ไม่มีร้านตรงตัวกรอง (ทั้งหมด '+all.length+' ร้าน) — ปรับตัวกรองด้านบน';
+  }else{
+    $('qStatus').textContent = 'ผ่านตัวกรอง '+items.length+' ร้าน จากทั้งหมด '+all.length
+      +' • หมุดบนแผนที่ '+plotted+' ร้าน'
+      +(hidden>0?(' (อีก '+hidden+' ร้านต่ำกว่า 200 รีวิว — อยู่ในรายการ)'):'')
+      +(loadQData().updated?(' • อัปเดต '+fmtDate(loadQData().updated)):'');
+  }
 }
 function renderQList(items, mks){
-  const sorted = items.slice().sort((a,b)=>(Number(b.reviews)||0)-(Number(a.reviews)||0));
-  $('qList').innerHTML = sorted.map(it=>{
+  const rowHtml = it => {
     const k = esc(qKeyOf(it));
     return '<div class="qrow" data-k="'+k+'" data-lat="'+it.lat+'" data-lng="'+it.lng+'">'+
       '<span class="rv">'+(it.reviews? Number(it.reviews).toLocaleString()+' รีวิว':'')+(it.rating? ' • '+it.rating+'★':'')+'</span>'+
@@ -1224,6 +1299,15 @@ function renderQList(items, mks){
       '<a class="qmini" target="_blank" rel="noopener" href="'+esc(gmapsLink(it))+'">เปิดใน Google Maps</a></div>'+
       '<div class="qrev" data-rvpanel="'+k+'" style="display:none"></div>'+
     '</div>';
+  };
+  const gz = {};
+  items.forEach(it=>{ const z = it.zone||'ไม่ระบุโซน'; if(!gz[z]) gz[z] = []; gz[z].push(it); });
+  const zsum = z => gz[z].reduce((t,x)=>t+(Number(x.reviews)||0), 0);
+  const zones = Object.keys(gz).sort((a,b)=>zsum(b)-zsum(a));
+  $('qList').innerHTML = zones.map(z=>{
+    const arr = gz[z].slice().sort((a,b)=>(Number(b.reviews)||0)-(Number(a.reviews)||0));
+    return '<div class="qzone-head">'+esc(z)+' <span style="color:var(--ash);font-family:Sarabun;font-size:12.5px;font-weight:normal">'+arr.length+' ร้าน • รวม '+zsum(z).toLocaleString()+' รีวิว</span></div>'
+      + arr.map(rowHtml).join('');
   }).join('');
   $('qList').querySelectorAll('.qrow').forEach(el=>{
     el.addEventListener('click', e=>{
@@ -1502,8 +1586,8 @@ $('btnQSweep').addEventListener('click', qSweepAll);
 $('btnQGoogle').addEventListener('click', ()=> runQFetch($('btnQGoogle'), qFetchGoogle));
 $('qBuffetOnly').addEventListener('change', redrawQMarkers);
 $('btnQAnalyze').addEventListener('click', async ()=>{
-  const items = loadQData().items;
-  if(!items.length){ alert('ยังไม่มีข้อมูล — กดรวบรวมด้านบนก่อน'); return; }
+  const items = qApplyFilter(loadQData().items);
+  if(!items.length){ alert('ไม่มีร้านตรงตัวกรอง — ปรับตัวกรองหรือรวบรวมข้อมูลก่อน (การวิเคราะห์ใช้เฉพาะร้านที่ผ่านตัวกรองปัจจุบัน)'); return; }
   const btn = $('btnQAnalyze'); btn.disabled = true; const t0 = btn.textContent; btn.textContent = 'กำลังวิเคราะห์…';
   $('qErr').style.display = 'none';
   try{
@@ -1556,6 +1640,8 @@ $('btnSbSync').addEventListener('click', ()=>{
   updateSyncBadge();
   syncFromCloud(false);
   $('qZone').innerHTML = Q_ZONES.map((z,i)=>'<option value="'+i+'">'+esc(z[0])+'</option>').join('');
+  bindTierChips();
+  $('qMaxRating').addEventListener('change', ()=>{ qFilter.maxR = Number($('qMaxRating').value)||0; redrawQMarkers(); });
   attachSugg('inSubdistrict','sgSub','sub');
   attachSugg('inDistrict','sgDist','dist');
   attachSugg('inProvince','sgProv','prov');
