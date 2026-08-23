@@ -1,60 +1,1487 @@
--- ============================================================
--- JJ Site Scanner — Supabase setup (idempotent, รันซ้ำได้)
--- รันใน Supabase SQL Editor หนึ่งครั้ง แล้วเอา Project URL + anon key
--- (Project Settings > API) ไปวางใน "ตั้งค่า" ของแอพ
--- ============================================================
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>JJ Site Scanner — เรดาร์ทำเลสาขา 3 | จริงใจหมูกระทะ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root{
+    --charcoal:#171310;      /* ถ่านเย็น */
+    --surface:#221c17;       /* เขม่า */
+    --surface2:#2b241d;
+    --line:#3a322b;
+    --ash:#9c8f81;           /* ขี้เถ้า */
+    --paper:#f2eae0;         /* ข้อความหลัก */
+    --emberA:#e5484d;        /* โมเดล A ลาดพร้าววังหิน */
+    --emberA-deep:#b3261e;
+    --modelB:#6e8fb2;        /* โมเดล B รัชดา */
+    --pass:#58a66e;
+    --warn:#d9a036;
+    --fail:#e5484d;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    background:var(--charcoal);
+    color:var(--paper);
+    font-family:'Sarabun',Tahoma,sans-serif;
+    font-size:16px;line-height:1.6;
+    background-image:radial-gradient(ellipse 90% 50% at 50% -10%, rgba(229,72,77,.10), transparent 60%);
+    min-height:100vh;
+  }
+  .wrap{max-width:860px;margin:0 auto;padding:20px 16px 90px}
+  h1,h2,h3,.num{font-family:'Kanit','Sarabun',sans-serif}
 
-create extension if not exists pgcrypto;
+  /* ---------- header ---------- */
+  header{display:flex;align-items:center;gap:14px;padding:6px 0 20px}
+  .brandmark{
+    width:52px;height:52px;border-radius:50%;flex:none;
+    background:conic-gradient(from 210deg, #3a2a1e, #6b3324, var(--emberA), #6b3324, #3a2a1e);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 0 22px rgba(229,72,77,.35), inset 0 0 0 3px #171310, inset 0 0 0 4px #4a3b2e;
+  }
+  .brandmark span{font-family:'Kanit';font-weight:700;font-size:19px;color:#ffe9d6;text-shadow:0 1px 2px #000}
+  .brand-eyebrow{font-size:12.5px;letter-spacing:.14em;color:var(--emberA);font-weight:600}
+  header h1{font-size:24px;font-weight:600;line-height:1.25}
+  header .sub{font-size:13px;color:var(--ash)}
 
--- ---------- ประวัติการสแกนทำเล (เก็บผลเต็มทั้งก้อนใน data) ----------
-create table if not exists public.jj3_scans (
-  id         uuid primary key default gen_random_uuid(),
-  ts         bigint not null,          -- timestamp ฝั่งแอพ ใช้เป็นตัว dedupe/ลบ
-  area       text,
-  grade      text,
-  lp_pct     int,                      -- % คล้ายลาดพร้าววังหิน (โมเดล A)
-  rd_pct     int,                      -- % คล้ายรัชดา (โมเดล B)
-  d_lp       numeric,                  -- ระยะห่างสาขาลาดพร้าววังหิน (กม.)
-  d_rd       numeric,                  -- ระยะห่างสาขารัชดา (กม.)
-  lat        numeric,
-  lng        numeric,
-  data       jsonb not null,           -- ผลสแกนเต็ม (เปิดย้อนหลังได้ครบทุกส่วน)
-  created_at timestamptz default now()
-);
+  /* ---------- panels ---------- */
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 16px;margin-bottom:16px}
+  .panel h2{font-size:17px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .panel h2 .dot{width:8px;height:8px;border-radius:50%;background:var(--emberA);box-shadow:0 0 8px var(--emberA)}
+  label{display:block;font-size:13px;color:var(--ash);margin:10px 0 4px}
+  input,select,textarea{
+    width:100%;font-size:16px;font-family:'Sarabun';
+    background:var(--charcoal);color:var(--paper);
+    border:1px solid var(--line);border-radius:10px;padding:11px 12px;outline:none;
+  }
+  input:focus,select:focus{border-color:var(--emberA);box-shadow:0 0 0 3px rgba(229,72,77,.18)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+  @media(max-width:560px){.grid2{grid-template-columns:1fr}}
 
-create unique index if not exists jj3_scans_ts_uidx on public.jj3_scans (ts);
-create index if not exists jj3_scans_created_idx on public.jj3_scans (created_at desc);
+  .scan-btn{
+    width:100%;margin-top:18px;border:none;border-radius:12px;cursor:pointer;
+    font-family:'Kanit';font-size:18px;font-weight:600;letter-spacing:.02em;
+    padding:15px;color:#fff;
+    background:linear-gradient(180deg,var(--emberA),var(--emberA-deep));
+    box-shadow:0 4px 18px rgba(179,38,30,.4);
+    transition:transform .12s ease, box-shadow .12s ease;
+  }
+  .scan-btn:active{transform:scale(.985)}
+  .scan-btn:disabled{opacity:.55;cursor:wait}
+  @keyframes emberpulse{0%,100%{box-shadow:0 4px 18px rgba(179,38,30,.35)}50%{box-shadow:0 4px 30px rgba(229,72,77,.75)}}
+  .scan-btn.loading{animation:emberpulse 1.6s ease-in-out infinite}
+  @media (prefers-reduced-motion: reduce){.scan-btn.loading{animation:none}}
 
--- ---------- ร้านคิวยาวบนแผนที่ (หน้า 2) ----------
-create table if not exists public.jj3_queue_spots (
-  key            text primary key,     -- name|lat|lng ปัด 3 ตำแหน่ง (ฝั่งแอพสร้าง)
-  name           text not null,
-  lat            numeric not null,
-  lng            numeric not null,
-  zone           text,
-  type           text,
-  queue_evidence text,
-  rating         text,
-  reviews        int,
-  url            text,
-  src            text,                 -- 'ai' หรือ 'google'
-  updated_at     timestamptz default now()
-);
+  .settings-toggle{background:none;border:none;color:var(--ash);font-family:'Sarabun';font-size:13px;cursor:pointer;text-decoration:underline dotted;margin-top:12px}
+  .settings{display:none;margin-top:8px;border-top:1px dashed var(--line);padding-top:6px}
+  .settings.open{display:block}
+  .hint{font-size:12.5px;color:var(--ash);margin-top:6px;line-height:1.5}
 
--- คอลัมน์เพิ่มภายหลัง (รันซ้ำได้)
-alter table public.jj3_queue_spots add column if not exists pid text;   -- Google place id
-alter table public.jj3_queue_spots add column if not exists rv  jsonb;  -- ข้อความรีวิวเด่น (สูงสุด 5)
-alter table public.jj3_queue_spots add column if not exists hist jsonb; -- สแนปช็อตยอดรีวิวตามเวลา (คำนวณอัตราเพิ่ม/สัปดาห์)
-alter table public.jj3_queue_spots add column if not exists deep jsonb; -- ประวัติร้านจาก AI (ปีที่เปิด/กระแส/เหตุคิวยาว)
+  /* ---------- autocomplete ---------- */
+  .sugg-wrap{position:relative}
+  .sugg{position:absolute;left:0;right:0;top:100%;z-index:30;background:var(--surface2);
+    border:1px solid var(--line);border-radius:0 0 10px 10px;max-height:250px;overflow:auto;display:none;
+    box-shadow:0 12px 26px rgba(0,0,0,.5)}
+  .sugg div{padding:9px 12px;font-size:15px;border-bottom:1px solid var(--line);cursor:pointer}
+  .sugg div:last-child{border-bottom:none}
+  .sugg div:active,.sugg div:hover{background:rgba(229,72,77,.12)}
+  .sugg small{color:var(--ash);display:block;font-size:12px}
 
--- ---------- RLS: เปิดกว้างแบบเครื่องมือภายใน (ใครถือ anon key อ่าน/เขียนได้) ----------
-alter table public.jj3_scans        enable row level security;
-alter table public.jj3_queue_spots  enable row level security;
+  /* ---------- stat cards ---------- */
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0}
+  @media(max-width:560px){.duo{grid-template-columns:1fr}}
+  .stat{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .stat .lb{font-size:12px;color:var(--ash);font-family:'Kanit'}
+  .stat .vl{font-size:14.5px;margin-top:2px}
+  .occ td{font-size:13.5px}
+  .occ .sal{color:#8fd3a5;font-family:'Kanit';white-space:nowrap}
 
-drop policy if exists jj3_scans_all on public.jj3_scans;
-create policy jj3_scans_all on public.jj3_scans
-  for all using (true) with check (true);
+  /* ---------- ตารางเทียบสาขาต้นแบบ ---------- */
+  .cmp-wrap{overflow-x:auto;margin:8px 0;border:1px solid var(--line);border-radius:10px}
+  .cmp{min-width:680px;margin:0}
+  .cmp th{white-space:nowrap}
+  .cmp th.c-new{color:#fff}
+  .cmp th.c-lp{color:var(--emberA)}
+  .cmp th.c-rd{color:#9dbede}
+  .cmp td{font-size:13px}
+  .cmp td:first-child{color:var(--ash);font-family:'Kanit';font-size:12.5px;min-width:118px}
+  .cmp td:nth-child(2){background:rgba(229,72,77,.07)}
 
-drop policy if exists jj3_queue_all on public.jj3_queue_spots;
-create policy jj3_queue_all on public.jj3_queue_spots
-  for all using (true) with check (true);
+  /* ---------- loading ---------- */
+  #loadingBox{display:none;text-align:center;padding:26px 14px}
+  .coal{width:64px;height:64px;margin:0 auto 14px;border-radius:50%;
+    background:radial-gradient(circle at 40% 35%, #ff9d6b, var(--emberA) 45%, #571512 80%);
+    filter:blur(.4px);animation:emberpulse 1.4s ease-in-out infinite;box-shadow:0 0 30px rgba(229,72,77,.5)}
+  #loadingMsg{font-family:'Kanit';font-size:16px;color:var(--paper)}
+  #loadingSub{font-size:13px;color:var(--ash);margin-top:4px}
+
+  /* ---------- result ---------- */
+  #resultBox{display:none}
+  .area-title{font-size:21px;font-weight:600}
+  .area-meta{font-size:13px;color:var(--ash);margin-top:2px}
+  .area-meta a{color:var(--modelB)}
+  .banner{border-radius:10px;padding:10px 14px;font-size:14.5px;margin:12px 0;font-weight:600}
+  .banner.fail{background:rgba(229,72,77,.14);border:1px solid rgba(229,72,77,.5);color:#ff9b9e}
+  .banner.warn{background:rgba(217,160,54,.12);border:1px solid rgba(217,160,54,.45);color:#e8c07a}
+  .banner.pass{background:rgba(88,166,110,.12);border:1px solid rgba(88,166,110,.45);color:#8fd3a5}
+
+  /* DNA gauge — ลายเซ็นของแอพ */
+  .dna{margin:18px 0 6px}
+  .dna-row{display:flex;align-items:center;gap:10px}
+  .dna-half{flex:1;height:22px;background:var(--charcoal);border:1px solid var(--line);position:relative;overflow:hidden}
+  .dna-half.left{border-radius:11px 0 0 11px}
+  .dna-half.right{border-radius:0 11px 11px 0}
+  .dna-fill{position:absolute;top:0;bottom:0;transition:width .9s cubic-bezier(.2,.8,.2,1)}
+  .dna-half.left .dna-fill{right:0;background:linear-gradient(270deg,var(--emberA),var(--emberA-deep))}
+  .dna-half.right .dna-fill{left:0;background:linear-gradient(90deg,#8fb0d4,var(--modelB))}
+  .grade-seal{
+    width:64px;height:64px;flex:none;border-radius:50%;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    border:2px solid var(--line);background:var(--surface2);
+    font-family:'Kanit';
+  }
+  .grade-seal .g{font-size:24px;font-weight:700;line-height:1}
+  .grade-seal .t{font-size:10px;color:var(--ash)}
+  .dna-labels{display:flex;justify-content:space-between;margin-top:6px;font-size:13px}
+  .dna-labels .num{font-size:20px;font-weight:600}
+  .dna-labels .lp{color:var(--emberA);text-align:left}
+  .dna-labels .rd{color:#9dbede;text-align:right}
+  .dna-labels small{display:block;color:var(--ash);font-size:12px;font-family:'Sarabun'}
+
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+  .chip{font-size:13px;padding:5px 12px;border-radius:99px;border:1px solid var(--line);background:var(--surface2)}
+  .chip b{font-family:'Kanit';font-weight:600}
+  .chip.pass{border-color:rgba(88,166,110,.6);color:#8fd3a5}
+  .chip.warn{border-color:rgba(217,160,54,.6);color:#e8c07a}
+  .chip.fail{border-color:rgba(229,72,77,.6);color:#ff9b9e}
+
+  .sec-label{font-size:12.5px;letter-spacing:.12em;color:var(--emberA);font-weight:600;margin:20px 0 6px;font-family:'Kanit'}
+  .kv p{margin:6px 0;font-size:15px}
+  .kv b{color:#fff}
+
+  table{width:100%;border-collapse:collapse;margin:8px 0;font-size:14px}
+  th{font-family:'Kanit';font-weight:500;font-size:13px;color:var(--ash);text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
+  td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+  td.sc{font-family:'Kanit';font-weight:600;text-align:center;width:52px}
+  td.sc.a{color:var(--emberA)} td.sc.b{color:#9dbede}
+  .why{color:var(--ash);font-size:13.5px}
+
+  .comp-item,.rent-item{padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin:8px 0;background:var(--surface2)}
+  .comp-item b{font-family:'Kanit';font-weight:500}
+  .comp-item .km{float:right;color:var(--warn);font-family:'Kanit';font-size:13px}
+  .comp-item .d,.rent-item .d{font-size:13.5px;color:var(--ash);margin-top:2px}
+  .rent-item .price{color:#8fd3a5;font-family:'Kanit';font-weight:500}
+
+  ul.checks{margin:6px 0 0 20px}
+  ul.checks li{margin:5px 0;font-size:14.5px}
+  .verdict{background:var(--surface2);border-left:4px solid var(--emberA);border-radius:8px;padding:12px 14px;font-size:15px;margin-top:8px}
+  .sources{font-size:12.5px;color:var(--ash);margin-top:14px;border-top:1px dashed var(--line);padding-top:10px}
+  .sources a{color:var(--modelB);word-break:break-all}
+
+  /* ---------- history ---------- */
+  .hist-table td{font-size:13.5px}
+  .hist-name{cursor:pointer;color:#fff;text-decoration:underline dotted}
+  .hist-del{background:none;border:none;color:var(--ash);cursor:pointer;font-size:15px}
+  .muted{color:var(--ash);font-size:13.5px}
+  .err{background:rgba(229,72,77,.12);border:1px solid rgba(229,72,77,.5);border-radius:10px;padding:12px 14px;font-size:14px;color:#ffb3b5;margin-top:12px;display:none}
+  details{margin-top:8px}
+  summary{cursor:pointer;color:var(--ash);font-size:13px}
+  pre{white-space:pre-wrap;font-size:12px;color:var(--ash);background:var(--charcoal);border-radius:8px;padding:10px;margin-top:6px;max-height:280px;overflow:auto}
+  footer{text-align:center;color:var(--ash);font-size:12px;margin-top:30px}
+
+  /* ---------- แท็บ + หน้าแผนที่คิว ---------- */
+  .tabbar{display:flex;gap:8px;margin-bottom:14px}
+  .tab{flex:1;text-align:center;padding:11px;border:1px solid var(--line);border-radius:10px;
+    background:var(--surface);font-family:'Kanit';font-size:15px;cursor:pointer;color:var(--ash)}
+  .tab.active{background:linear-gradient(180deg,var(--emberA),var(--emberA-deep));color:#fff;border-color:transparent}
+  #qmap{height:430px;border-radius:12px;border:1px solid var(--line);background:#0e0b09}
+  .legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12.5px;color:var(--ash);margin:8px 0}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+  .qbtnrow{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+  .qbtn{flex:1;min-width:200px;border:none;border-radius:10px;cursor:pointer;font-family:'Kanit';font-size:14.5px;
+    padding:11px;color:#fff;background:linear-gradient(180deg,var(--emberA),var(--emberA-deep))}
+  .qbtn.alt{background:var(--surface2);border:1px solid var(--line);color:var(--paper)}
+  .qbtn:disabled{opacity:.55;cursor:wait}
+  .qrow{padding:9px 12px;border:1px solid var(--line);border-radius:10px;margin:7px 0;background:var(--surface2);cursor:pointer}
+  .qrow b{font-family:'Kanit';font-weight:500}
+  .qrow .rv{float:right;color:#8fd3a5;font-family:'Kanit';font-size:13px}
+  .qrow .d{font-size:13px;color:var(--ash);margin-top:2px}
+  .leaflet-container{font-family:'Sarabun'}
+  .qact{margin-top:6px}
+  .qmini{display:inline-block;background:var(--charcoal);border:1px solid var(--line);color:var(--paper);
+    font-family:'Kanit';font-size:12.5px;padding:4px 12px;border-radius:8px;cursor:pointer;margin-right:8px;text-decoration:none}
+  .qmini:active{background:rgba(229,72,77,.15)}
+  .qrev{margin-top:8px;border-top:1px dashed var(--line);padding-top:6px}
+  .qrv-item{background:var(--charcoal);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:6px 0;font-size:13.5px}
+  .tdot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:7px;vertical-align:-1px;border:1px solid rgba(255,255,255,.25)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brandmark"><span>จจ</span></div>
+    <div>
+      <div class="brand-eyebrow">จริงใจหมูกระทะ — BRANCH 3</div>
+      <h1>JJ Site Scanner</h1>
+      <div class="sub">พิมพ์พื้นที่ → รีเสิร์ชสด → คะแนนเทียบ DNA ลาดพร้าววังหิน / รัชดา</div>
+    </div>
+  </header>
+
+  <div class="tabbar">
+    <div class="tab active" id="tabScan">สแกนทำเล</div>
+    <div class="tab" id="tabQueue">แผนที่ร้านคิวยาว</div>
+  </div>
+
+  <div id="pageScan">
+  <!-- ============ ฟอร์มค้นหา ============ -->
+  <section class="panel">
+    <h2><span class="dot"></span>พื้นที่ที่จะสแกน</h2>
+    <label>ถนน / จุดสังเกต (แนะนำให้ใส่เป็นอันดับแรก — ช่วยให้สแกนแม่นขึ้นมาก)</label>
+    <input id="inLandmark" placeholder="เช่น ถนนรามอินทรา กม.8 ใกล้แฟชั่นไอส์แลนด์" autocomplete="off">
+    <div class="grid2">
+      <div class="sugg-wrap">
+        <label>เขต / อำเภอ *</label>
+        <input id="inDistrict" placeholder="พิมพ์เพื่อเลือก เช่น คันนายาว" autocomplete="off">
+        <div class="sugg" id="sgDist"></div>
+      </div>
+      <div class="sugg-wrap">
+        <label>แขวง / ตำบล</label>
+        <input id="inSubdistrict" placeholder="พิมพ์เพื่อเลือก เช่น รามอินทรา" autocomplete="off">
+        <div class="sugg" id="sgSub"></div>
+      </div>
+      <div class="sugg-wrap">
+        <label>จังหวัด</label>
+        <input id="inProvince" value="กรุงเทพมหานคร" autocomplete="off">
+        <div class="sugg" id="sgProv"></div>
+      </div>
+      <div class="sugg-wrap">
+        <label>รหัสไปรษณีย์</label>
+        <input id="inZip" placeholder="พิมพ์เพื่อเลือก เช่น 10230" inputmode="numeric" autocomplete="off">
+        <div class="sugg" id="sgZip"></div>
+      </div>
+    </div>
+    <div class="hint">พิมพ์ช่องไหนก็ได้แล้วแตะเลือกจากรายการ — เลือกเขตแล้วรายการแขวงจะเด้งให้เลือกต่อทันที ระบบเติมครบทุกช่องอัตโนมัติ (ครอบคลุม กทม. ครบ 50 เขต 180 แขวง + นนทบุรี ปทุมธานี สมุทรปราการ สมุทรสาคร นครปฐม ระดับตำบล • จังหวัดอื่นพิมพ์เองได้ตามปกติ)</div>
+    <label>รัศมีวิเคราะห์รอบจุดนี้</label>
+    <select id="inRadius">
+      <option value="2">2 กม.</option>
+      <option value="3" selected>3 กม. (แนะนำ — catchment หลักของร้าน)</option>
+      <option value="5">5 กม.</option>
+      <option value="8">8 กม.</option>
+      <option value="10">10 กม.</option>
+    </select>
+
+    <button class="scan-btn" id="btnScan">สแกนทำเลนี้</button>
+
+    <button class="settings-toggle" id="btnSettings">ตั้งค่า API key (สำหรับใช้งานบน GitHub Pages)</button>
+    <div class="settings" id="settingsBox">
+      <label>Anthropic API key</label>
+      <input id="inApiKey" type="password" placeholder="sk-ant-..." autocomplete="off">
+      <div class="hint">
+        <b>วิธีเอา key (ทำครั้งเดียว):</b> เข้า platform.claude.com → สมัคร/ล็อกอิน Console (คนละบัญชีกับแอป Claude — แพ็กเกจ Pro/Max ใช้แทนไม่ได้) → เมนู Billing เติมเครดิต → เมนู API Keys → Create Key → คัดลอกทั้งเส้น (ขึ้นต้น sk-ant-) มาวางช่องบนแล้วสแกนได้เลย<br>
+        • เปิดผ่านหน้า Claude โดยตรง — ไม่ต้องใส่ key ระบบจัดการให้<br>
+        • เปิดบน GitHub Pages / เปิดไฟล์เอง — ต้องใส่ key เสมอ (key เก็บในเครื่องนี้เท่านั้น และส่งตรงหา Anthropic ที่เดียว)<br>
+        • ค่าใช้จ่ายต่อสแกน: ค้นเว็บสูงสุด 10 ครั้ง + โทเคน รวมราวหลักบาทถึง ~10 บาท ใช้เวลา ~1–2 นาที
+      </div>
+      <label style="margin-top:14px">Supabase URL (เชื่อมคลาวด์ — เก็บประวัติถาวรทั้งหมด ดูได้ทุกเครื่อง)</label>
+      <input id="inSbUrl" placeholder="https://xxxx.supabase.co" autocomplete="off">
+      <label>Supabase anon key</label>
+      <input id="inSbKey" type="password" placeholder="eyJ..." autocomplete="off">
+      <button class="settings-toggle" id="btnSbSync">บันทึก + ซิงก์เดี๋ยวนี้</button>
+      <div class="hint" id="sbStatus"></div>
+      <div class="hint">URL + publishable key ตั้งค่ามาให้ครบแล้ว (โปรเจกต์ jjmk-stock) — ทำครั้งแรกครั้งเดียว: รันไฟล์ jj3-supabase-setup.sql ใน SQL Editor แล้วแอพจะซิงก์อัตโนมัติทุกเครื่องเอง • ช่องนี้แก้เฉพาะตอนย้ายโปรเจกต์ • ห้ามใช้ sb_secret_ ในแอพนี้เด็ดขาด</div>
+    </div>
+    <div class="err" id="errBox"></div>
+  </section>
+
+  <!-- ============ loading ============ -->
+  <section class="panel" id="loadingBox">
+    <div class="coal"></div>
+    <div id="loadingMsg">กำลังจุดเตา…</div>
+    <div id="loadingSub">รีเสิร์ชสดใช้เวลาราว 1–2 นาที อย่าเพิ่งปิดหน้า</div>
+  </section>
+
+  <!-- ============ ผลสแกน ============ -->
+  <section class="panel" id="resultBox"></section>
+
+  <!-- ============ ประวัติ + ตารางเทียบ ============ -->
+  <section class="panel" id="histPanel" style="display:none">
+    <h2><span class="dot"></span>ทำเลที่สแกนแล้ว — ตารางเทียบ</h2>
+    <div style="overflow-x:auto">
+      <table class="hist-table" id="histTable"></table>
+    </div>
+    <div class="muted" style="margin-top:8px">แตะชื่อทำเลเพื่อเปิดผลเต็มย้อนหลัง • โหมดเครื่องเดียวเก็บ 50 รายการล่าสุด — เชื่อม Supabase ใน "ตั้งค่า" แล้วเก็บถาวรทั้งหมด ดูย้อนหลังได้ทุกเครื่อง (สำรอง/นำเข้าไฟล์ใช้ได้เหมือนเดิม)</div>
+    <button class="settings-toggle" id="btnExportHist" style="margin-right:14px">สำรองเป็นไฟล์ (.json)</button>
+    <button class="settings-toggle" id="btnImportHist" style="margin-right:14px">นำเข้าไฟล์</button>
+    <button class="settings-toggle" id="btnClearHist">ล้างประวัติทั้งหมด</button>
+    <input type="file" id="fileImportHist" accept=".json,application/json" style="display:none">
+  </section>
+
+  </div><!-- /pageScan -->
+
+  <!-- ============ หน้า 2: แผนที่ร้านคิวยาว ============ -->
+  <div id="pageQueue" style="display:none">
+    <section class="panel">
+      <h2><span class="dot"></span>แผนที่ร้านคิวยาว กทม.+ปริมณฑล</h2>
+      <div id="qmap"></div>
+      <div class="legend">
+        <span><i style="background:#e5484d"></i>&ge;1,000 รีวิว</span>
+        <span><i style="background:#ffd23f"></i>500–999</span>
+        <span><i style="background:#58a66e"></i>200–499</span>
+        <span style="color:#6b6157">&lt;200 ไม่ปักหมุด (ยังอยู่ในรายการ)</span>
+        <span><i style="background:#d9a036"></i>สาขาจริงใจ</span>
+        <span><i style="background:#6e8fb2"></i>ทำเลที่สแกน</span>
+      </div>
+      <div class="qbtnrow">
+        <button class="qbtn" id="btnQAi">รวบรวมด้วย AI (ใช้ key เดิม)</button>
+        <button class="qbtn alt" id="btnQGoogle">สแกนรีวิวคิวจาก Google Places</button>
+      </div>
+      <div class="grid2">
+        <div>
+          <label>โซนที่จะสแกนด้วย Google</label>
+          <select id="qZone"></select>
+        </div>
+        <div>
+          <label>Google Maps API key (ไม่บังคับ — ใส่แล้วแผนที่สลับเป็น Google Map + สแกนสดได้)</label>
+          <input id="inGKey" type="password" placeholder="AIza..." autocomplete="off">
+        </div>
+      </div>
+      <label style="margin-top:10px"><input type="checkbox" id="qBuffetOnly" style="width:auto;margin-right:8px">แสดงเฉพาะสายบุฟเฟต์ / ชาบู / หมูกระทะ / ปิ้งย่าง</label>
+      <div class="hint">
+        • ปุ่ม AI: ใช้ Anthropic key เดิม ไปกวาดรีวิว Google Maps + บทความ หาร้านที่คนพูดว่า "คิวยาว คิวเยอะ รอนาน คนเยอะ" ทั่ว กทม.+ปริมณฑล (~1–2 นาที)<br>
+        • ปุ่ม Google: ยิง Places API ค้นคำว่าคิวยาว/รอคิวในโซนที่เลือกแบบสด — ต้องมี Google Maps API key (สร้างที่ console.cloud.google.com เปิดใช้ Maps JavaScript API + Places API (New) มีโควตาฟรีรายเดือนพอใช้ส่วนตัว แนะนำตั้ง restriction โดเมน + budget alert)<br>
+        • ข้อมูลทั้งสองทางถูกรวมเข้าชุดเดียว จำไว้ในเครื่อง แตะหมุด/รายการเพื่อดูรายละเอียดและเปิดใน Google Maps
+      </div>
+      <div class="err" id="qErr"></div>
+      <div class="muted" id="qStatus" style="margin-top:6px"></div>
+      <div class="qbtnrow">
+        <button class="qbtn" id="btnQAnalyze">วิเคราะห์ข้อมูลทั้งหมดด้วย AI</button>
+        <button class="qbtn alt" id="btnQExport">ดาวน์โหลดข้อมูล (.json)</button>
+      </div>
+      <div id="qAnalysisOut" class="verdict" style="display:none;white-space:pre-wrap"></div>
+      <div id="qList"></div>
+      <button class="settings-toggle" id="btnQClear">ล้างข้อมูลร้านคิวยาวทั้งหมด</button>
+    </section>
+  </div>
+
+  <footer>JJ Site Scanner v2.5 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+</div>
+
+<script>
+'use strict';
+
+/* ========== ค่าคงที่ของธุรกิจ ========== */
+const BRANCHES = {
+  LP: {name:'ลาดพร้าววังหิน', lat:13.816373, lng:100.591518},
+  RD: {name:'รัชดา (ห้วยขวาง)', lat:13.781467, lng:100.574181}
+};
+const DIM_W = [0.20,0.15,0.10,0.15,0.10,0.10,0.10,0.10];
+const DIM_NAMES = [
+  'D1 ความหนาแน่นประชากร (20%)','D2 ประเภทที่อยู่อาศัย (15%)','D3 กำลังซื้อ (10%)',
+  'D4 ชีวิตกลางคืนหลัง 22:00 (15%)','D5 การเดินทาง+ที่จอด (10%)','D6 ลักษณะถนน/ทำเล (10%)',
+  'D7 การแข่งขัน format ใหญ่ (10%)','D8 ความเหมาะสมสถานที่ (10%)'
+];
+const BRANCH_BASE = {
+  lp: {
+    sales:'4.0 ลบ. (ยอดจริง — เปิด 1 ปี)', cust:'~360 คน',
+    popReg:'เขตลาดพร้าว ~120,000 + ขอบจตุจักร/บึงกุ่ม',
+    popAct:'ประชากรแฝงต่ำ — ย่านบ้านเจ้าของอยู่เอง',
+    housing:'หมู่บ้าน/ทาวน์โฮมเกือบทั้งหมด',
+    house:'บ้าน 4–10 ลบ. (กลาง–กลางบน)', condo:'คอนโดน้อยมาก',
+    night:'พีคเดียว 18:00–21:30 — หลัง 4 ทุ่มเบา',
+    transit:'รถยนต์ ~100% ไม่มีรถไฟฟ้า ที่จอดคือหัวใจ',
+    comp:'เบา — ไม่มี format ตรงประชิด (จุดที่ทำให้ชนะ)'
+  },
+  rd: {
+    sales:'7.5 ลบ. เดือนแรก (วางแผนที่ 5–6.5)', cust:'~670 คน',
+    popReg:'ห้วยขวาง ~80,000 (ทะเบียนต่ำกว่าจริงมาก)',
+    popAct:'แฝงสูงมาก — คอนโดตลอดแนวรัชดา–สุทธิสาร',
+    housing:'คอนโด/อพาร์ตเมนต์เป็นหลัก',
+    house:'บ้านน้อย', condo:'คอนโด ~80–120K/ตรม.',
+    night:'พีคสอง 22:00–01:00 = แต้มต่อยอด 20–30%',
+    transit:'MRT ห้วยขวาง/สุทธิสาร + รถ + เดินจากคอนโด',
+    comp:'หนาแน่น แต่ demand ล้น supply'
+  }
+};
+function salesToCust(s){
+  const m = String(s||'').match(/[0-9]+(?:\.[0-9]+)?/g);
+  if(!m) return '';
+  const v = m.map(Number).filter(x=>x>0 && x<=20);
+  if(!v.length) return '';
+  const f = x => Math.round(x*1000000/30/370);
+  return v.length>1 ? '~'+f(v[0])+'–'+f(v[1])+' คน (ประเมิน)' : '~'+f(v[0])+' คน (ประเมิน)';
+}
+const MODEL_NAME = 'claude-sonnet-4-6';
+const HIST_KEY = 'jj3scan_history_v1';
+const KEY_KEY  = 'jj3scan_apikey';
+
+/* ========== storage แบบกันพัง (artifact ไม่มี localStorage ก็ยังใช้ได้) ========== */
+const mem = {};
+const store = {
+  get(k){ try{ return localStorage.getItem(k); }catch(e){ return mem[k] ?? null; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} mem[k]=v; },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} delete mem[k]; }
+};
+
+/* ========== utils ========== */
+const $ = id => document.getElementById(id);
+
+/* ========== ฐานข้อมูลพื้นที่ กทม.ครบ 50 เขต 180 แขวง + ปริมณฑล (zip, เขต/อำเภอ, "แขวง|แขวง|...") ========== */
+const TH_AREAS = {
+"กรุงเทพมหานคร":[
+["10200","พระนคร","พระบรมมหาราชวัง|วังบูรพาภิรมย์|วัดราชบพิธ|สำราญราษฎร์|ศาลเจ้าพ่อเสือ|เสาชิงช้า|บวรนิเวศ|ตลาดยอด|ชนะสงคราม|บ้านพานถม|บางขุนพรหม|วัดสามพระยา"],
+["10300","ดุสิต","ดุสิต|วชิรพยาบาล|สวนจิตรลดา|สี่แยกมหานาค|ถนนนครไชยศรี"],
+["10530","หนองจอก","กระทุ่มราย|หนองจอก|คลองสิบ|คลองสิบสอง|โคกแฝด|คู้ฝั่งเหนือ|ลำผักชี|ลำต้อยติ่ง"],
+["10500","บางรัก","มหาพฤฒาราม|สีลม|สุริยวงศ์|บางรัก|สี่พระยา"],
+["10220","บางเขน","อนุสาวรีย์|ท่าแร้ง"],
+["10240","บางกะปิ","คลองจั่น|หัวหมาก"],
+["10330","ปทุมวัน","รองเมือง|วังใหม่|ปทุมวัน|ลุมพินี"],
+["10100","ป้อมปราบศัตรูพ่าย","ป้อมปราบ|วัดเทพศิรินทร์|คลองมหานาค|บ้านบาตร|วัดโสมนัส"],
+["10260","พระโขนง","บางจาก|พระโขนงใต้"],
+["10510","มีนบุรี","มีนบุรี|แสนแสบ"],
+["10520","ลาดกระบัง","ลาดกระบัง|คลองสองต้นนุ่น|คลองสามประเวศ|ลำปลาทิว|ทับยาว|ขุมทอง"],
+["10120","ยานนาวา","ช่องนนทรี|บางโพงพาง"],
+["10100","สัมพันธวงศ์","จักรวรรดิ|สัมพันธวงศ์|ตลาดน้อย"],
+["10400","พญาไท","สามเสนใน|พญาไท"],
+["10600","ธนบุรี","วัดกัลยาณ์|หิรัญรูจี|บางยี่เรือ|บุคคโล|ตลาดพลู|ดาวคะนอง|สำเหร่"],
+["10600","บางกอกใหญ่","วัดอรุณ|วัดท่าพระ"],
+["10310","ห้วยขวาง","ห้วยขวาง|บางกะปิ|สามเสนนอก"],
+["10600","คลองสาน","สมเด็จเจ้าพระยา|คลองสาน|บางลำภูล่าง|คลองต้นไทร"],
+["10170","ตลิ่งชัน","คลองชักพระ|ตลิ่งชัน|ฉิมพลี|บางพรม|บางระมาด|บางเชือกหนัง"],
+["10700","บางกอกน้อย","ศิริราช|บ้านช่างหล่อ|บางขุนนนท์|บางขุนศรี|อรุณอมรินทร์"],
+["10150","บางขุนเทียน","ท่าข้าม|แสมดำ"],
+["10160","ภาษีเจริญ","บางหว้า|บางด้วน|บางจาก|บางแวก|คลองขวาง|ปากคลองภาษีเจริญ|คูหาสวรรค์"],
+["10160","หนองแขม","หนองแขม|หนองค้างพลู"],
+["10140","ราษฎร์บูรณะ","ราษฎร์บูรณะ|บางปะกอก"],
+["10700","บางพลัด","บางพลัด|บางอ้อ|บางบำหรุ|บางยี่ขัน"],
+["10400","ดินแดง","ดินแดง|รัชดาภิเษก"],
+["10240","บึงกุ่ม","คลองกุ่ม|นวมินทร์"],
+["10230","บึงกุ่ม","นวลจันทร์"],
+["10120","สาทร","ทุ่งวัดดอน|ยานนาวา|ทุ่งมหาเมฆ"],
+["10800","บางซื่อ","บางซื่อ|วงศ์สว่าง"],
+["10900","จตุจักร","ลาดยาว|เสนานิคม|จันทรเกษม|จอมพล|จตุจักร"],
+["10120","บางคอแหลม","บางคอแหลม|วัดพระยาไกร|บางโคล่"],
+["10250","ประเวศ","ประเวศ|หนองบอน|ดอกไม้"],
+["10110","คลองเตย","คลองเตย|คลองตัน|พระโขนง"],
+["10250","สวนหลวง","สวนหลวง|อ่อนนุช|พัฒนาการ"],
+["10150","จอมทอง","บางขุนเทียน|บางค้อ|บางมด|จอมทอง"],
+["10210","ดอนเมือง","สีกัน|ดอนเมือง|สนามบิน"],
+["10400","ราชเทวี","ทุ่งพญาไท|ถนนพญาไท|ถนนเพชรบุรี|มักกะสัน"],
+["10230","ลาดพร้าว","ลาดพร้าว|จรเข้บัว"],
+["10110","วัฒนา","คลองเตยเหนือ|คลองตันเหนือ|พระโขนงเหนือ"],
+["10160","บางแค","บางแค|บางแคเหนือ|บางไผ่|หลักสอง"],
+["10210","หลักสี่","ทุ่งสองห้อง|ตลาดบางเขน"],
+["10220","สายไหม","สายไหม|ออเงิน|คลองถนน"],
+["10230","คันนายาว","คันนายาว|รามอินทรา"],
+["10240","สะพานสูง","สะพานสูง|ราษฎร์พัฒนา"],
+["10250","สะพานสูง","ทับช้าง"],
+["10310","วังทองหลาง","วังทองหลาง|สะพานสอง|คลองเจ้าคุณสิงห์|พลับพลา"],
+["10510","คลองสามวา","สามวาตะวันตก|สามวาตะวันออก|บางชัน|ทรายกองดิน|ทรายกองดินใต้"],
+["10260","บางนา","บางนาเหนือ|บางนาใต้"],
+["10170","ทวีวัฒนา","ทวีวัฒนา|ศาลาธรรมสพน์"],
+["10140","ทุ่งครุ","บางมด|ทุ่งครุ"],
+["10150","บางบอน","บางบอนเหนือ|บางบอนใต้|คลองบางพราน|คลองบางบอน"]
+],
+"นนทบุรี":[
+["11000","เมืองนนทบุรี","สวนใหญ่|ตลาดขวัญ|บางเขน|บางกระสอ|ท่าทราย|บางไผ่|บางศรีเมือง|บางกร่าง|ไทรม้า|บางรักน้อย"],
+["11130","บางกรวย","วัดชลอ|บางกรวย|บางสีทอง|บางขนุน|บางขุนกอง|บางคูเวียง|มหาสวัสดิ์|ปลายบาง|ศาลากลาง"],
+["11140","บางใหญ่","บางม่วง|บางแม่นาง|บางเลน|เสาธงหิน|บ้านใหม่|บางใหญ่"],
+["11110","บางบัวทอง","โสนลอย|บางบัวทอง|บางรักใหญ่|บางคูรัด|ละหาร|ลำโพ|พิมลราช|บางรักพัฒนา"],
+["11150","ไทรน้อย","ไทรน้อย|ราษฎร์นิยม|หนองเพรางาย|ไทรใหญ่|ขุนศรี|คลองขวาง|ทวีวัฒนา"],
+["11120","ปากเกร็ด","ปากเกร็ด|บางตลาด|บ้านใหม่|บางพูด|บางตะไนย์|คลองพระอุดม|ท่าอิฐ|เกาะเกร็ด|อ้อมเกร็ด|คลองข่อย|บางพลับ|คลองเกลือ"]
+],
+"ปทุมธานี":[
+["12000","เมืองปทุมธานี","บางปรอก|บ้านใหม่|บ้านกลาง|บ้านฉาง|บ้านกระแชง|บางขะแยง|บางคูวัด|บางหลวง|บางเดื่อ|บางพูด|บางพูน|บางกะดี|สวนพริกไทย|หลักหก"],
+["12120","คลองหลวง","คลองหนึ่ง|คลองสอง|คลองสาม|คลองสี่|คลองห้า|คลองหก|คลองเจ็ด"],
+["12130","ธัญบุรี","ประชาธิปัตย์"],
+["12110","ธัญบุรี","รังสิต|บึงยี่โถ|ลำผักกูด|บึงสนั่น|บึงน้ำรักษ์"],
+["12130","ลำลูกกา","คูคต"],
+["12150","ลำลูกกา","ลาดสวาย|บึงคำพร้อย|ลำลูกกา|บึงทองหลาง|ลำไทร|บึงคอไห|พืชอุดม"],
+["12140","ลาดหลุมแก้ว","ระแหง|ลาดหลุมแก้ว|คูบางหลวง|คูขวาง|คลองพระอุดม|บ่อเงิน|หน้าไม้"],
+["12170","หนองเสือ","บึงบา|บึงบอน|บึงกาสาม|บึงชำอ้อ|หนองสามวัง|ศาลาครุ|นพรัตน์"],
+["12160","สามโคก","บางเตย|คลองควาย|สามโคก|กระแชง|บางโพธิ์เหนือ|เชียงรากใหญ่|บ้านปทุม|บ้านงิ้ว|เชียงรากน้อย|บางกระบือ|ท้ายเกาะ"]
+],
+"สมุทรปราการ":[
+["10270","เมืองสมุทรปราการ","ปากน้ำ|สำโรงเหนือ|บางเมือง|บางด้วน|บางเมืองใหม่|เทพารักษ์|บางโปรง"],
+["10280","เมืองสมุทรปราการ","ท้ายบ้าน|ท้ายบ้านใหม่|บางปู|บางปูใหม่|แพรกษา|แพรกษาใหม่"],
+["10540","บางพลี","บางพลีใหญ่|บางแก้ว|บางปลา|บางโฉลง|ราชาเทวะ|หนองปรือ"],
+["10130","พระประแดง","ตลาด|บางพึ่ง|บางจาก|บางครุ|บางหญ้าแพรก|บางหัวเสือ|สำโรงใต้|สำโรง|สำโรงกลาง|บางยอ|บางกะเจ้า|บางน้ำผึ้ง|บางกระสอบ|บางกอบัว|ทรงคนอง"],
+["10290","พระสมุทรเจดีย์","นาเกลือ|บ้านคลองสวน|แหลมฟ้าผ่า|ปากคลองบางปลากด|ในคลองบางปลากด"],
+["10560","บางบ่อ","บางบ่อ|บ้านระกาศ|บางพลีน้อย|บางเพรียง|คลองสวน|เปร็ง|คลองนิยมยาตรา"],
+["10550","บางบ่อ","คลองด่าน"],
+["10570","บางเสาธง","บางเสาธง|ศีรษะจรเข้น้อย|ศีรษะจรเข้ใหญ่"]
+],
+"สมุทรสาคร":[
+["74000","เมืองสมุทรสาคร","มหาชัย|ท่าฉลอม|โกรกกราก|บ้านเกาะ|บางกระเจ้า|บางหญ้าแพรก|ชัยมงคล|ท่าจีน|นาดี|ท่าทราย|คอกกระบือ|บางน้ำจืด|พันท้ายนรสิงห์|โคกขาม|บ้านบ่อ|บางโทรัด|กาหลง|นาโคก"],
+["74110","กระทุ่มแบน","ตลาดกระทุ่มแบน|ท่าไม้|สวนหลวง|บางยาง|คลองมะเดื่อ|หนองนกไข่|ดอนไก่ดี|แคราย|ท่าเสา"],
+["74130","กระทุ่มแบน","อ้อมน้อย"],
+["74120","บ้านแพ้ว","บ้านแพ้ว|หลักสาม|ยกกระบัตร|โรงเข้|หนองสองห้อง|หนองบัว|หลักสอง|เจ็ดริ้ว|คลองตัน|อำแพง|สวนส้ม|เกษตรพัฒนา"]
+],
+"นครปฐม":[
+["73110","สามพราน","สามพราน|ท่าข้าม|ทรงคนอง|หอมเกร็ด|บางกระทึก|บางเตย|บางช้าง|ไร่ขิง|ท่าตลาด|กระทุ่มล้ม|คลองใหม่|ตลาดจินดา|คลองจินดา|ยายชา|บ้านใหม่"],
+["73160","สามพราน","อ้อมใหญ่"],
+["73170","พุทธมณฑล","ศาลายา|คลองโยง|มหาสวัสดิ์"],
+["73120","นครชัยศรี",""],
+["73000","เมืองนครปฐม",""],
+["73140","กำแพงแสน",""],
+["73150","ดอนตูม",""],
+["73130","บางเลน",""]
+]};
+const AREAS = (function(){
+  const out = [];
+  for(const p in TH_AREAS){
+    TH_AREAS[p].forEach(row=>{
+      const z=row[0], d=row[1], ss=row[2];
+      if(!ss){ out.push({z,p,d,s:''}); }
+      else ss.split('|').forEach(s=>out.push({z,p,d,s}));
+    });
+  }
+  return out;
+})();
+
+/* ========== autocomplete engine ========== */
+function suggSearch(mode, q){
+  q = q.trim();
+  if(!q) return [];
+  const res=[], seen=new Set();
+  for(const a of AREAS){
+    let ok=false, key='', main='', sub='';
+    if(mode==='sub'){ ok = a.s && a.s.indexOf(q)>-1; key=a.s+'|'+a.d+'|'+a.p; main=a.s; sub=a.d+' • '+a.p+' • '+a.z; }
+    else if(mode==='dist'){ ok = a.d.indexOf(q)>-1; key=a.d+'|'+a.p; main=a.d; sub=a.p+' • '+a.z; }
+    else if(mode==='prov'){ ok = a.p.indexOf(q)>-1; key=a.p; main=a.p; sub=''; }
+    else { ok = a.z.indexOf(q)===0; key=a.z+'|'+a.d; main=a.z+' — '+a.d; sub=a.p; }
+    if(ok && !seen.has(key)){ seen.add(key); res.push({a, main, sub}); if(res.length>=8) break; }
+  }
+  return res;
+}
+function subsOf(d, p, z){
+  let rows = AREAS.filter(a => a.d===d && a.s && (!z || a.z===z));
+  if(p){ const pr = rows.filter(a=>a.p===p); if(pr.length) rows = pr; }
+  const res=[], seen=new Set();
+  rows.forEach(a=>{ if(!seen.has(a.s)){ seen.add(a.s); res.push({a, main:a.s, sub:a.d+' • '+a.p+' • '+a.z}); } });
+  return res;
+}
+function distsOf(p){
+  const res=[], seen=new Set();
+  for(const a of AREAS){ if(a.p===p && !seen.has(a.d)){ seen.add(a.d); res.push({a, main:a.d, sub:a.p+' • '+a.z}); } }
+  return res;
+}
+function suggPick(mode, a){
+  if(mode==='prov'){ $('inProvince').value = a.p; return; }
+  $('inDistrict').value = a.d;
+  $('inProvince').value = a.p;
+  $('inZip').value      = a.z;
+  $('inSubdistrict').value = (mode==='sub') ? a.s : '';
+}
+function hideAllSugg(){ document.querySelectorAll('.sugg').forEach(b=>{ b.style.display='none'; }); }
+function showSuggBox(box, items, mode){
+  if(!items.length){ box.style.display='none'; box.innerHTML=''; return; }
+  box.innerHTML = items.map((it,i)=>'<div data-i="'+i+'">'+esc(it.main)+(it.sub?'<small>'+esc(it.sub)+'</small>':'')+'</div>').join('');
+  box.style.display='block';
+  box.querySelectorAll('div[data-i]').forEach(el=>{
+    el.addEventListener('mousedown', ev=>{ ev.preventDefault(); pickAndCascade(mode, items[Number(el.getAttribute('data-i'))].a); });
+  });
+}
+function pickAndCascade(mode, a){
+  suggPick(mode, a);
+  hideAllSugg();
+  if(mode==='prov'){ showSuggBox($('sgDist'), distsOf(a.p), 'dist'); }
+  else if(mode==='dist'){ showSuggBox($('sgSub'), subsOf(a.d, a.p, ''), 'sub'); }
+  else if(mode==='zip'){ showSuggBox($('sgSub'), subsOf(a.d, a.p, a.z), 'sub'); }
+}
+function attachSugg(inputId, boxId, mode){
+  const inp = $(inputId), box = $(boxId);
+  function show(){
+    const q = inp.value.trim();
+    let items;
+    if(mode==='sub' && !q){
+      const d = $('inDistrict').value.trim();
+      items = d ? subsOf(d, $('inProvince').value.trim(), '') : [];
+    } else if(mode==='dist' && !q){
+      const p = $('inProvince').value.trim();
+      items = p ? distsOf(p) : [];
+    } else {
+      items = suggSearch(mode, q);
+    }
+    showSuggBox(box, items, mode);
+  }
+  inp.addEventListener('input', show);
+  inp.addEventListener('focus', show);
+  inp.addEventListener('blur', ()=> setTimeout(()=>{ box.style.display='none'; }, 200));
+}
+document.addEventListener('mousedown', e=>{
+  if(!e.target.closest || !e.target.closest('.sugg-wrap')) hideAllSugg();
+});
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function haversine(lat1,lng1,lat2,lng2){
+  const R=6371, toR=x=>x*Math.PI/180;
+  const dLat=toR(lat2-lat1), dLng=toR(lng2-lng1);
+  const a=Math.sin(dLat/2)**2 + Math.cos(toR(lat1))*Math.cos(toR(lat2))*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function calcPct(dims, key){
+  let s=0, n=0;
+  for(let i=0;i<8;i++){
+    const d = dims && dims[i];
+    const v = d ? Number(d[key]) : NaN;
+    if(!isNaN(v)){ s += Math.max(0,Math.min(10,v)) * DIM_W[i]; n++; }
+  }
+  return n ? Math.round(s*10) : 0;
+}
+function distChip(km, branch){
+  const t = branch + ' ' + km.toFixed(1) + ' กม.';
+  if(km >= 6)  return {cls:'pass', txt:t+' — ผ่าน'};
+  if(km >= 5)  return {cls:'warn', txt:t+' — เฉียดเกณฑ์'};
+  return {cls:'fail', txt:t+' — ใกล้เกินไป'};
+}
+
+/* ========== prompt ที่ฝัง framework ทั้งชุด ========== */
+const JSON_SCHEMA = '{"area":"ชื่อย่านสั้นๆ","lat":13.00,"lng":100.00,"summary":"สรุป 2-3 ประโยค","pop_registered":"ตัวเลขทะเบียน+ปี+ที่มา","pop_actual":"ประมาณการผู้อยู่จริงรวมประชากรแฝง + ฐานที่ใช้ประมาณ","housing":"โครงสร้างที่อยู่อาศัย แนวราบ:คอนโด","purchasing":"สรุปกำลังซื้อ 1-2 ประโยค","house_price":"ช่วงราคาบ้านในย่าน","condo_price":"ช่วงราคาคอนโด บาท/ตรม.","nightlife":"...","transit":"...","future":"...","occupations":[{"job":"อาชีพ","share":"~% หรือคำอธิบายสัดส่วน","salary":"x–y บาท/เดือน"}],"competitors":[{"name":"","detail":"","km":0}],"rent":[{"desc":"","price":"","src":""}],"dims":[{"d":1,"lp":0,"rd":0,"why":"เหตุผลสั้น"},{"d":2,"lp":0,"rd":0,"why":""},{"d":3,"lp":0,"rd":0,"why":""},{"d":4,"lp":0,"rd":0,"why":""},{"d":5,"lp":0,"rd":0,"why":""},{"d":6,"lp":0,"rd":0,"why":""},{"d":7,"lp":0,"rd":0,"why":""},{"d":8,"lp":0,"rd":0,"why":""}],"sales":"ประเมิน x–y ลบ./เดือน","grade":"A|B+|B|B-|C|ตัด","verdict":"คำตัดสิน 2-4 ประโยค","checks":["สิ่งที่ต้องเช็คภาคสนาม 3-5 ข้อ"],"sources":[{"t":"ชื่อแหล่ง","u":"url"}]}';
+function buildPrompt(q){
+  return `คุณคือนักวิเคราะห์ทำเลร้านอาหารในกรุงเทพฯ/ปริมณฑล ทำงานให้ร้าน "จริงใจหมูกระทะ" (บุฟเฟต์หมูกระทะ+ชาบูในโต๊ะเดียว) เพื่อประเมินพื้นที่เปิดสาขาที่ 3
+
+## บริบทธุรกิจ (ใช้เป็นเกณฑ์ทุกข้อ)
+- ราคา Standard 239 / Premium 329 บาท (สัดส่วนขายจริง 45:55) + ชุดน้ำ/ของหวาน 59 + VAT 7% → ยอดต่อหัวจริง ~370 บาท, กลุ่มเฉลี่ย 2.9 คน (ลูกค้า >50% มาเป็นคู่), บิลต่อโต๊ะ ~830–1,100 บาท
+- ร้านเปิด 11:00–02:00 (หน้าต่างดึกสำคัญมาก), ต้องการพื้นที่ 350–500 ตรม. ชั้นเดียว หรือที่ดิน 300–500 ตร.วา, ที่จอด 30+ คัน, เพดานค่าเช่ารวม 150,000–200,000 บาท/เดือน (fixed เท่านั้น)
+- เป้ายอดสาขาใหม่ 5 ล้านบาท/เดือน (~450 คน/วัน)
+- สาขาเดิม: (A) ลาดพร้าววังหิน พิกัด 13.8164,100.5915 ยอด 4 ลบ./เดือน — "โมเดล A ถนนย่านหมู่บ้าน": ถนนสายรองผ่ากลางย่านบ้านแนวราบหนาแน่น ครอบครัว/คู่ขับรถมากินในรัศมี 3–5 กม. ไม่มีรถไฟฟ้า พีค 18:00–21:30 (B) รัชดา ห้วยขวาง พิกัด 13.7815,100.5742 ยอดเดือนแรก 7.5 ลบ. — "โมเดล B เมืองคอนโด+กินดื่มดึก": คอนโดหนาแน่น+ประชากรแฝงสูง MRT วัยทำงานกินนอกบ้านถี่ มีพีคสอง 22:00–01:00
+
+## พื้นที่ที่ต้องวิเคราะห์รอบนี้
+แขวง/ตำบล: ${q.sub || '-'} | เขต/อำเภอ: ${q.dist} | จังหวัด: ${q.prov} | รหัสไปรษณีย์: ${q.zip || '-'} | จุดสังเกต/ถนน: ${q.lm || '-'} | รัศมีวิเคราะห์: ${q.r} กม.
+
+## สิ่งที่ต้องทำ
+ใช้ web_search ค้นข้อมูลล่าสุดจริง (อย่างน้อย 5 ครั้ง สูงสุด ~10 ครั้ง):
+1) ประชากรทะเบียนราษฎร์ของเขต/อำเภอนี้ ปีล่าสุด (กรมการปกครอง/สถิติ)
+2) ประชากรที่อาศัยอยู่จริงโดยประมาณ = ทะเบียน + ประชากรแฝง (ค้นข้อมูลประชากรแฝง จำนวนคอนโด/หอพัก/แรงงานในย่าน แล้วประมาณการอย่างมีหลักฐาน พร้อมระบุฐานที่ใช้)
+3) ราคาบ้าน (บ้านเดี่ยว/ทาวน์โฮม) และราคาคอนโด (บาท/ตรม.) ของย่านนี้ปีล่าสุด — แยกสองตัวเลข
+4) โครงสร้างอาชีพของผู้อยู่อาศัยในรัศมี: ประมาณ 10 อาชีพหลัก เรียงตามสัดส่วน (อิงโครงสร้างที่อยู่อาศัย สถานประกอบการ นิคม/ออฟฟิศ/ราชการในย่าน + สถิติสำรวจภาวะการทำงานระดับจังหวัด) พร้อมฐานเงินเดือนของแต่ละอาชีพ (บาท/เดือน อ้างอิง salary guide หรือประกาศรับสมัครงานล่าสุด)
+5) คู่แข่งบุฟเฟต์ format ใหญ่ (40 โต๊ะ+/100 ที่นั่ง+) ในรัศมี ${q.r} กม.: สุกี้ตี๋น้อย, Lucky Suki, Best Beef, สุกี้จินดา, จักรพรรดิ์หมูกระทะ, ชาบูอินดี้, นายพรานหมูกระทะ และหมูกระทะ/ชาบูเจ้าถิ่นดัง — ระบุสาขา+ระยะโดยประมาณ
+6) ประกาศเช่าจริงที่ตรงสเปค (ยูนิตมอลล์/ที่ดิน/โชว์รูมริมถนน) ในย่านนี้ พร้อมราคา
+7) รถไฟฟ้า/โครงการอนาคตที่กระทบ demand ใน 2–3 ปี
+
+## การให้คะแนน 8 มิติ (มิติละ 0–10 สองชุด: lp = เหมือนสภาพแวดล้อมลาดพร้าววังหินแค่ไหน, rd = เหมือนรัชดาแค่ไหน)
+D1 ความหนาแน่นประชากร/catchment | D2 ประเภทที่อยู่อาศัยหลัก | D3 กำลังซื้อ | D4 ชีวิตกลางคืนหลัง 22:00 | D5 โหมดเดินทาง+ที่จอด | D6 ลักษณะถนน/ทำเล | D7 สภาพแข่งขัน format ใหญ่ (โล่งแบบ A vs แน่นแต่ demand ล้นแบบ B) | D8 ความเหมาะสมของสถานที่จริงในย่าน (เปิดตี 2 / ควัน / หาพื้นที่ 350–500 ตรม. ได้)
+
+## เกรด: A (เจรจาทันที) / B+ / B / B- / C (ไม่คุ้ม) / ตัด — ชั่งจาก ศักยภาพยอด + การแข่งขัน + โอกาสได้พื้นที่ในเพดานเช่า
+
+## รูปแบบคำตอบ — ตอบเป็น JSON ล้วนเท่านั้น ห้ามมีข้อความอื่นหรือ markdown fence:
+${JSON_SCHEMA}
+
+กติกาเข้ม: ห้ามพิมพ์คำบรรยาย บทนำ หรือสรุประหว่างการค้น — ข้อความตอบทั้งหมดต้องมีแค่ JSON ก้อนเดียว | ทุก field เขียนกระชับไม่เกิน 2 ประโยค | lat/lng ต้องเป็นจุดกึ่งกลางย่านที่วิเคราะห์จริง | occupations ต้องครบ 10 อาชีพเรียงจากสัดส่วนมากไปน้อย (ช่องละ 1 บรรทัดสั้น) | pop_actual และ occupations เป็นประมาณการได้แต่ต้องมีคำว่า "ประมาณ" และระบุฐานที่ใช้ ห้ามเขียนให้ดูเป็นสถิติทางการ | competitors ใส่เฉพาะร้านที่พบจริงเท่านั้น แบรนด์ที่ค้นแล้วไม่พบห้ามใส่ใน array (สรุปรวมสั้นๆ ใน verdict แทน) และใส่ km เฉพาะที่ประเมินได้ | ตัวเลขอื่นทุกตัวต้องมาจากการค้นจริง ถ้าหาไม่พบให้เขียน "ไม่พบข้อมูล — ต้องเช็คเอง" ห้ามกุตัวเลข | dims ต้องครบ 8 ข้อเรียงลำดับ`;
+}
+
+/* ========== เรียก Anthropic API ========== */
+async function apiCall(body){
+  const key = ($('inApiKey').value || '').trim();
+  if(key && key.indexOf('sk-ant-') !== 0){
+    throw new Error('รูปแบบ key ไม่ถูกต้อง — key จริงจาก platform.claude.com จะขึ้นต้นด้วย sk-ant- (อย่าใช้รหัสผ่าน/บัญชีแอป Claude)');
+  }
+  const headers = {'Content-Type':'application/json'};
+  if(key){
+    headers['x-api-key'] = key;
+    headers['anthropic-version'] = '2023-06-01';
+    headers['anthropic-dangerous-direct-browser-access'] = 'true';
+    store.set(KEY_KEY, key);
+  }
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=>ctrl.abort(), 240000);
+  try{
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST', headers, signal:ctrl.signal,
+      body: JSON.stringify(body)
+    });
+    if(!res.ok){
+      let apiMsg = '';
+      try{ const j = await res.json(); apiMsg = (j.error && j.error.message) || ''; }catch(e){}
+      let msg = 'HTTP ' + res.status + (apiMsg ? ' — ' + apiMsg : '');
+      if(res.status === 401){
+        msg = !key
+          ? 'ยังไม่ได้ใส่ API key — การรันนอกหน้า Claude (GitHub Pages/เปิดไฟล์เอง) ต้องใช้ key เสมอ: กด "ตั้งค่า API key" ด้านล่างปุ่มสแกน แล้ววาง key จาก platform.claude.com/settings/keys'
+          : 'API key ไม่ถูกต้อง — เช็คว่า (1) เป็น key จาก platform.claude.com (Console) ไม่ใช่บัญชีแอป Claude (2) คัดลอกครบทั้งเส้นไม่มีช่องว่าง (3) key ยังไม่ถูกลบ/ปิดใช้งาน';
+      }
+      else if(res.status === 400 && /credit|billing|balance/i.test(apiMsg)){
+        msg = 'เครดิต API ไม่พอ — บัญชี Console แยกจากแพ็กเกจ Claude Pro/Max ต้องเติมเครดิตที่ platform.claude.com เมนู Billing ก่อนใช้งาน';
+      }
+      else if(res.status === 429) msg += ' | ยิงถี่เกิน rate limit — รอสักครู่แล้วลองใหม่';
+      else if(res.status >= 500) msg += ' | ฝั่ง Anthropic หนาแน่น — ลองใหม่อีกครั้ง';
+      throw new Error(msg);
+    }
+    const data = await res.json();
+    return {
+      text: (data.content || []).map(b => b.type === 'text' ? b.text : '').filter(Boolean).join('\n'),
+      stop: data.stop_reason || ''
+    };
+  } finally { clearTimeout(timer); }
+}
+async function callClaude(prompt){
+  return apiCall({
+    model: MODEL_NAME,
+    max_tokens: 8000,
+    messages: [{role:'user', content: prompt}],
+    tools: [{type:'web_search_20250305', name:'web_search', max_uses:10}]
+  });
+}
+async function repairTruncated(rawText){
+  const p = 'ข้อความด้านล่างคือผลวิเคราะห์ทำเลร้านอาหารที่ JSON ถูกตัดกลางคันหรือมีข้อความปนมา ให้เขียน JSON ฉบับสมบูรณ์ก้อนเดียวตาม schema นี้ โดยใช้ข้อมูลจากข้อความเท่านั้น ห้ามค้นเพิ่ม ห้ามกุตัวเลขใหม่ ส่วนที่ขาดหาย (เช่น dims 8 ข้อ, sales, grade, verdict, checks, sources) ให้ประเมิน/สรุปจากข้อมูลที่มี ทุก field เขียนกระชับ ตอบเป็น JSON ล้วนห้ามมีข้อความอื่น:\n'
+    + JSON_SCHEMA + '\n\n--- ข้อมูลดิบ ---\n' + rawText;
+  return apiCall({ model: MODEL_NAME, max_tokens: 8000, messages: [{role:'user', content: p}] });
+}
+function parseJSON(text){
+  let t = String(text||'').replace(/```json|```/g,'').trim();
+  const s = t.indexOf('{'), e = t.lastIndexOf('}');
+  if(s === -1 || e === -1) throw new Error('ไม่พบ JSON ในคำตอบ');
+  return JSON.parse(t.slice(s, e+1));
+}
+
+/* ========== loading ========== */
+const LOAD_MSGS = [
+  'กำลังจุดเตา — ตั้งต้นการค้นหา…','กำลังค้นข้อมูลประชากรและที่อยู่อาศัย…',
+  'กำลังสแกนคู่แข่งบุฟเฟต์ในรัศมี…','กำลังเช็คราคาบ้าน/คอนโดของย่าน…',
+  'กำลังหาประกาศเช่าที่ตรงสเปค…','กำลังประมาณโครงสร้างอาชีพและฐานเงินเดือน…','กำลังให้คะแนน 8 มิติ เทียบสองสาขาต้นแบบ…','เกือบเสร็จ — เรียบเรียงรายงาน…'
+];
+let loadTimer = null;
+function setLoading(on){
+  $('loadingBox').style.display = on ? 'block' : 'none';
+  $('btnScan').disabled = on;
+  $('btnScan').classList.toggle('loading', on);
+  $('btnScan').textContent = on ? 'กำลังสแกน…' : 'สแกนทำเลนี้';
+  clearInterval(loadTimer);
+  if(on){
+    let i = 0; $('loadingMsg').textContent = LOAD_MSGS[0];
+    loadTimer = setInterval(()=>{ i = Math.min(i+1, LOAD_MSGS.length-1); $('loadingMsg').textContent = LOAD_MSGS[i]; }, 12000);
+  }
+}
+
+/* ========== render ผล ========== */
+function render(r){
+  const lpPct = calcPct(r.dims,'lp'), rdPct = calcPct(r.dims,'rd');
+  const hasGeo = isFinite(r.lat) && isFinite(r.lng);
+  const dLP = hasGeo ? haversine(r.lat,r.lng,BRANCHES.LP.lat,BRANCHES.LP.lng) : null;
+  const dRD = hasGeo ? haversine(r.lat,r.lng,BRANCHES.RD.lat,BRANCHES.RD.lng) : null;
+  const minD = hasGeo ? Math.min(dLP,dRD) : null;
+  const grade = (minD !== null && minD < 5) ? 'ตัด' : (r.grade || '-');
+  r._calc = {lpPct, rdPct, dLP, dRD, grade};
+
+  let banner = '';
+  if(minD !== null){
+    if(minD < 5) banner = '<div class="banner fail">ทับรัศมีสาขาเดิม (ห่างเพียง '+minD.toFixed(1)+' กม.) — เปิดที่นี่ = แย่งลูกค้าตัวเอง ระบบปรับเกรดเป็น "ตัด" อัตโนมัติ</div>';
+    else if(minD < 6) banner = '<div class="banner warn">เฉียดเกณฑ์ระยะ 6 กม. — เผื่อ cannibalization 5–10% ของยอดสาขาเดิมในการคำนวณเสมอ</div>';
+    else banner = '<div class="banner pass">ผ่านเกณฑ์ระยะห่างจากทั้งสองสาขา (ขั้นต่ำ 6 กม.)</div>';
+  }
+
+  const model = lpPct >= rdPct ? 'เอียงโมเดล A — ถนนย่านหมู่บ้าน (แบบลาดพร้าววังหิน)' : 'เอียงโมเดล B — เมืองคอนโด+กินดื่มดึก (แบบรัชดา)';
+  const gmap = hasGeo ? ' • <a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query='+r.lat+','+r.lng+'">เปิดแผนที่</a>' : '';
+
+  const dimRows = (r.dims||[]).map((d,i)=>(
+    '<tr><td>'+esc(DIM_NAMES[i]||('D'+(i+1)))+'<div class="why">'+esc(d.why||'')+'</div></td>'+
+    '<td class="sc a">'+esc(d.lp)+'</td><td class="sc b">'+esc(d.rd)+'</td></tr>'
+  )).join('');
+
+  const comps = (r.competitors&&r.competitors.length) ? r.competitors.map(c=>(
+    '<div class="comp-item"><span class="km">'+((isFinite(c.km)&&Number(c.km)>0)? '~'+Number(c.km).toFixed(1)+' กม.':'')+'</span><b>'+esc(c.name)+'</b><div class="d">'+esc(c.detail||'')+'</div></div>'
+  )).join('') : '<div class="muted">ไม่พบคู่แข่ง format ใหญ่ในรัศมี — ต้องยืนยันภาคสนาม</div>';
+
+  const rents = (r.rent&&r.rent.length) ? r.rent.map(x=>(
+    '<div class="rent-item"><span class="price">'+esc(x.price||'สอบถามราคา')+'</span> — '+esc(x.desc||'')+'<div class="d">ที่มา: '+esc(x.src||'-')+'</div></div>'
+  )).join('') : '<div class="muted">ไม่พบประกาศตรงสเปคจากการค้นรอบนี้ — ให้นายหน้าล่าด้วยใบสเปคจากรายงาน PDF</div>';
+
+  const checks = (r.checks||[]).map(c=>'<li>'+esc(c)+'</li>').join('');
+  const sources = (r.sources||[]).map(s=>'<div>• '+esc(s.t||'')+' — <a target="_blank" rel="noopener" href="'+esc(s.u||'#')+'">'+esc(s.u||'')+'</a></div>').join('');
+
+  const occs = (r.occupations||[]).slice(0,10);
+  const occHtml = occs.length ?
+    '<div class="sec-label">อาชีพหลักของคนในย่าน (10 อันดับ — ประมาณการ)</div>'+
+    '<table class="occ"><tr><th style="width:34px">#</th><th>อาชีพ / สัดส่วนโดยประมาณ</th><th>ฐานเงินเดือน</th></tr>'+
+    occs.map((o,i)=>'<tr><td class="sc">'+(i+1)+'</td><td>'+esc(o.job||'-')+'<div class="why">'+esc(o.share||'')+'</div></td><td class="sal">'+esc(o.salary||'-')+'</td></tr>').join('')+
+    '</table><div class="muted">ประมาณจากโครงสร้างที่อยู่อาศัย-สถานประกอบการในย่าน + สถิติแรงงานระดับจังหวัด/salary guide — ไม่ใช่สถิติทางการรายแขวง</div>'
+    : '';
+
+  const B = BRANCH_BASE;
+  const compCell = (r.competitors&&r.competitors.length)
+    ? r.competitors.length+' ร้าน: '+r.competitors.slice(0,3).map(c=>c.name).join(', ')+(r.competitors.length>3?' …':'')
+    : 'ไม่พบจากการค้น — เช็คภาคสนาม';
+  const distCell = (dLP!==null) ? ('LP '+dLP.toFixed(1)+' / RD '+dRD.toFixed(1)+' กม.') : '—';
+  const cmpRows = [
+    ['โมเดล / ความคล้าย', lpPct+'% A · '+rdPct+'% B — เกรด '+grade, 'ต้นแบบโมเดล A', 'ต้นแบบโมเดล B'],
+    ['ยอดขาย/เดือน', r.sales||'-', B.lp.sales, B.rd.sales],
+    ['ลูกค้า/วัน (ที่ ~370 บ./หัว)', salesToCust(r.sales)||'—', B.lp.cust, B.rd.cust],
+    ['ประชากรทะเบียน', r.pop_registered||r.population||'-', B.lp.popReg, B.rd.popReg],
+    ['อาศัยจริง / แฝง', r.pop_actual||'-', B.lp.popAct, B.rd.popAct],
+    ['ที่อยู่อาศัยหลัก', r.housing||'-', B.lp.housing, B.rd.housing],
+    ['ราคาบ้าน', r.house_price||'-', B.lp.house, B.rd.house],
+    ['ราคาคอนโด', r.condo_price||'-', B.lp.condo, B.rd.condo],
+    ['ชีวิตกลางคืน', r.nightlife||'-', B.lp.night, B.rd.night],
+    ['การเดินทาง', r.transit||'-', B.lp.transit, B.rd.transit],
+    ['คู่แข่ง format ใหญ่', compCell, B.lp.comp, B.rd.comp],
+    ['ระยะห่างจากสาขาเดิม', distCell, '—', '—']
+  ];
+  const cmpHtml =
+    '<div class="sec-label">เทียบกับ 2 สาขาต้นแบบ</div>'+
+    '<div class="cmp-wrap"><table class="cmp">'+
+    '<tr><th>หัวข้อ</th><th class="c-new">ทำเลที่สแกน</th><th class="c-lp">ลาดพร้าววังหิน (A)</th><th class="c-rd">รัชดา (B)</th></tr>'+
+    cmpRows.map(row=>'<tr><td>'+esc(row[0])+'</td><td>'+esc(row[1])+'</td><td>'+esc(row[2])+'</td><td>'+esc(row[3])+'</td></tr>').join('')+
+    '</table></div>'+
+    '<div class="muted">คอลัมน์สาขาต้นแบบเป็นข้อมูล baseline ฝังในแอพจากรายงานวิเคราะห์ ส.ค. 2569 — คอลัมน์ทำเลที่สแกนมาจากการรีเสิร์ชสดรอบนี้</div>';
+
+  $('resultBox').innerHTML =
+    '<div class="area-title">'+esc(r.area||'-')+'</div>'+
+    '<div class="area-meta">'+esc(r.summary||'')+gmap+'</div>'+banner+
+    '<div class="dna"><div class="dna-row">'+
+      '<div class="dna-half left"><div class="dna-fill" style="width:'+lpPct+'%"></div></div>'+
+      '<div class="grade-seal"><div class="g">'+esc(grade)+'</div><div class="t">เกรด</div></div>'+
+      '<div class="dna-half right"><div class="dna-fill" style="width:'+rdPct+'%"></div></div>'+
+    '</div><div class="dna-labels">'+
+      '<div class="lp"><span class="num">'+lpPct+'%</span><small>คล้ายลาดพร้าววังหิน (โมเดล A)</small></div>'+
+      '<div class="rd"><span class="num">'+rdPct+'%</span><small>คล้ายรัชดา (โมเดล B)</small></div>'+
+    '</div></div>'+
+    '<div class="chips">'+
+      (dLP!==null ? '<span class="chip '+distChip(dLP,'').cls+'">ห่างลาดพร้าววังหิน <b>'+dLP.toFixed(1)+'</b> กม.</span>':'')+
+      (dRD!==null ? '<span class="chip '+distChip(dRD,'').cls+'">ห่างรัชดา <b>'+dRD.toFixed(1)+'</b> กม.</span>':'')+
+      '<span class="chip">'+esc(model)+'</span>'+
+      '<span class="chip">ศักยภาพยอด: <b>'+esc(r.sales||'-')+'</b></span>'+
+    '</div>'+
+    cmpHtml+
+    '<div class="sec-label">ประชากรในรัศมี</div>'+
+    '<div class="duo">'+
+      '<div class="stat"><div class="lb">ทะเบียนราษฎร์</div><div class="vl">'+esc(r.pop_registered||r.population||'-')+'</div></div>'+
+      '<div class="stat"><div class="lb">อาศัยอยู่จริง รวมประชากรแฝง (ประมาณการ)</div><div class="vl">'+esc(r.pop_actual||'-')+'</div></div>'+
+    '</div>'+
+    '<div class="sec-label">กำลังซื้อ</div>'+
+    '<div class="duo">'+
+      '<div class="stat"><div class="lb">ราคาบ้านในย่าน</div><div class="vl">'+esc(r.house_price||'-')+'</div></div>'+
+      '<div class="stat"><div class="lb">ราคาคอนโดในย่าน</div><div class="vl">'+esc(r.condo_price||'-')+'</div></div>'+
+    '</div>'+
+    '<div class="kv"><p><b>สรุปกำลังซื้อ:</b> '+esc(r.purchasing||'-')+'</p></div>'+
+    occHtml+
+    '<div class="sec-label">คะแนน 8 มิติ</div>'+
+    '<div class="muted">ตัวเลข 0–10 ต่อมิติ ยิ่งสูง = มิตินั้นยิ่งเหมือนสาขาต้นแบบ — <span style="color:#ff9b9e">แดง = ลาดพร้าววังหิน (โมเดล A ย่านหมู่บ้าน)</span> · <span style="color:#9dbede">น้ำเงิน = รัชดา (โมเดล B เมืองคอนโด+ดึก)</span></div>'+
+    '<table><tr><th>มิติ</th><th style="text-align:center;color:#ff9b9e">คล้ายลาดพร้าววังหิน</th><th style="text-align:center;color:#9dbede">คล้ายรัชดา</th></tr>'+dimRows+'</table>'+
+    '<div class="sec-label">ข้อมูลย่าน</div><div class="kv">'+
+      '<p><b>ที่อยู่อาศัย:</b> '+esc(r.housing||'-')+'</p>'+
+      '<p><b>ชีวิตกลางคืน:</b> '+esc(r.nightlife||'-')+'</p>'+
+      '<p><b>การเดินทาง:</b> '+esc(r.transit||'-')+'</p>'+
+      '<p><b>อนาคต 2–3 ปี:</b> '+esc(r.future||'-')+'</p>'+
+    '</div>'+
+    '<div class="sec-label">คู่แข่ง format ใหญ่ในรัศมี</div>'+comps+
+    '<div class="sec-label">ประกาศเช่าที่เจอ</div>'+rents+
+    '<div class="sec-label">คำตัดสิน</div><div class="verdict">'+esc(r.verdict||'-')+'</div>'+
+    '<div class="sec-label">เช็คภาคสนามก่อนตัดสินใจ</div><ul class="checks">'+checks+'</ul>'+
+    (sources ? '<div class="sources"><b>แหล่งข้อมูล:</b>'+sources+'</div>' : '');
+  $('resultBox').style.display = 'block';
+  $('resultBox').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+/* ========== history ========== */
+function loadHist(){ try{ return JSON.parse(store.get(HIST_KEY) || '[]'); }catch(e){ return []; } }
+function saveHist(h){ store.set(HIST_KEY, JSON.stringify(h.slice(0, sbCfg()?300:50))); }
+function renderHist(){
+  const h = loadHist();
+  $('histPanel').style.display = h.length ? 'block' : 'none';
+  if(!h.length) return;
+  $('histTable').innerHTML =
+    '<tr><th>ทำเล</th><th style="color:#ff9b9e">คล้ายลาดพร้าว</th><th style="color:#9dbede">คล้ายรัชดา</th><th>เกรด</th><th>ห่าง (กม.) ลาดพร้าว/รัชดา</th><th></th></tr>' +
+    h.map((x,i)=>{
+      const c = x._calc || {};
+      return '<tr><td><span class="hist-name" data-i="'+i+'">'+esc(x.area||'-')+'</span><div class="why">'+fmtDate(x._ts)+'</div></td>'+
+        '<td class="sc a">'+ (c.lpPct!=null? c.lpPct+'%':'-') +'</td><td class="sc b">'+ (c.rdPct!=null? c.rdPct+'%':'-') +'</td>'+
+        '<td>'+esc(c.grade||x.grade||'-')+'</td>'+
+        '<td>'+ (c.dLP!=null? c.dLP.toFixed(1):'-') +' / '+ (c.dRD!=null? c.dRD.toFixed(1):'-') +'</td>'+
+        '<td><button class="hist-del" data-del="'+i+'" title="ลบ">✕</button></td></tr>';
+    }).join('');
+}
+$('histTable').addEventListener('click', e=>{
+  const open = e.target.getAttribute('data-i');
+  const del  = e.target.getAttribute('data-del');
+  const h = loadHist();
+  if(open !== null && h[open]){ render(h[open]); }
+  if(del !== null){
+    const removed = h[Number(del)];
+    h.splice(Number(del),1); saveHist(h); renderHist();
+    if(removed && removed._ts) cloudDeleteScan(removed._ts).catch(()=>{});
+    if(qMap) redrawQMarkers();
+  }
+});
+$('btnClearHist').addEventListener('click', ()=>{
+  if(!confirm('ล้างประวัติการสแกนทั้งหมด?')) return;
+  store.del(HIST_KEY); renderHist();
+  if(sbCfg() && confirm('ลบบนคลาวด์ (Supabase) ด้วยไหม? — ลบแล้วหายทุกเครื่อง กู้คืนไม่ได้')){
+    sbFetch('jj3_scans?ts=not.is.null',{method:'DELETE',headers:{'Prefer':'return=minimal'}}).then(updateSyncBadge).catch(()=>{});
+  }
+});
+function fmtDate(ts){
+  if(!ts) return '';
+  try{ return new Date(ts).toLocaleString('th-TH',{day:'numeric',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'})+' น.'; }
+  catch(e){ return ''; }
+}
+$('btnExportHist').addEventListener('click', ()=>{
+  const h = loadHist();
+  if(!h.length){ alert('ยังไม่มีประวัติให้สำรอง'); return; }
+  const blob = new Blob([JSON.stringify(h)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const d = new Date(), pad = n => String(n).padStart(2,'0');
+  a.download = 'jj3-scans-'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+$('btnImportHist').addEventListener('click', ()=> $('fileImportHist').click());
+$('fileImportHist').addEventListener('change', e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const rd = new FileReader();
+  rd.onload = ()=>{
+    try{
+      const inc = JSON.parse(rd.result);
+      if(!Array.isArray(inc)) throw new Error('รูปแบบไฟล์ไม่ถูกต้อง');
+      const cur = loadHist();
+      const seen = new Set(cur.map(x=>x._ts));
+      let added = 0;
+      inc.forEach(x=>{ if(x && x.area && !seen.has(x._ts)){ cur.push(x); added++; } });
+      cur.sort((a,b)=>(b._ts||0)-(a._ts||0));
+      saveHist(cur); renderHist(); syncFromCloud(false);
+      alert('นำเข้าแล้ว '+added+' รายการ — รวมทั้งหมด '+cur.length+' รายการ');
+    }catch(err){ alert('นำเข้าไม่สำเร็จ: '+(err.message||err)); }
+    e.target.value = '';
+  };
+  rd.readAsText(f);
+});
+
+/* ========== main ========== */
+$('btnSettings').addEventListener('click', ()=> $('settingsBox').classList.toggle('open'));
+$('btnScan').addEventListener('click', async ()=>{
+  const q = {
+    dist: $('inDistrict').value.trim(), sub: $('inSubdistrict').value.trim(),
+    prov: $('inProvince').value.trim() || 'กรุงเทพมหานคร',
+    zip: $('inZip').value.trim(), lm: $('inLandmark').value.trim(), r: $('inRadius').value
+  };
+  $('errBox').style.display = 'none';
+  if(!q.dist && !q.lm){ $('errBox').textContent = 'อย่างน้อยต้องใส่ "เขต/อำเภอ" หรือ "ถนน/จุดสังเกต" หนึ่งอย่าง'; $('errBox').style.display='block'; return; }
+  $('resultBox').style.display = 'none';
+  setLoading(true);
+  let raw = '';
+  try{
+    let out = await callClaude(buildPrompt(q));
+    raw = out.text;
+    let r;
+    try{
+      if(out.stop === 'max_tokens') throw new Error('truncated');
+      r = parseJSON(raw);
+    }catch(firstErr){
+      $('loadingMsg').textContent = 'ผลรอบแรกไม่สมบูรณ์ — กำลังเรียบเรียงใหม่อัตโนมัติ…';
+      const out2 = await repairTruncated(raw);
+      raw = out2.text;
+      r = parseJSON(raw);
+    }
+    r._q = q; r._ts = Date.now();
+    render(r);
+    const h = loadHist(); h.unshift(r); saveHist(h); renderHist();
+    if(qMap) redrawQMarkers();
+    cloudPushScan(r).then(()=>{ SYNC_STATE='ok'; updateSyncBadge(); }).catch(()=>{});
+  }catch(err){
+    const detail = raw ? '<details><summary>ดูคำตอบดิบ (สำหรับดีบัก)</summary><pre>'+esc(raw)+'</pre></details>' : '';
+    $('errBox').innerHTML = 'สแกนไม่สำเร็จ: '+esc(err.message||err)+' — ลองกดสแกนอีกครั้ง'+detail;
+    $('errBox').style.display = 'block';
+  }finally{
+    setLoading(false);
+  }
+});
+
+/* ========== Supabase sync (เก็บถาวร ดูได้ทุกเครื่อง) ========== */
+const SBURL_KEY = 'jj3_sb_url', SBKEY_KEY = 'jj3_sb_key';
+const SB_DEFAULT_KEY = 'sb_publishable_Bn6BMtcjasoPT3RZ_ekyOg_SLWWp-nm';
+const SB_DEFAULT_URL = 'https://aikyxvluaiubdidqxwnd.supabase.co';
+let SYNC_STATE = 'off';
+function sbCfg(){
+  const u = ((store.get(SBURL_KEY)||'').trim() || SB_DEFAULT_URL).replace(/\/+$/,'');
+  const k = (store.get(SBKEY_KEY)||'').trim() || SB_DEFAULT_KEY;
+  return (u && k) ? {u,k} : null;
+}
+async function sbFetch(path, opt){
+  const c = sbCfg(); if(!c) return null;
+  if(c.k.indexOf('sb_secret_') === 0){
+    throw new Error('ห้ามใช้ sb_secret_ ในแอพฝั่งเบราว์เซอร์เด็ดขาด — ใช้ sb_publishable_ หรือ anon key (eyJ...) เท่านั้น');
+  }
+  const base = {'apikey': c.k, 'Content-Type':'application/json'};
+  if(c.k.indexOf('eyJ') === 0){ base['Authorization'] = 'Bearer ' + c.k; } // เฉพาะ anon key แบบ JWT เดิมเท่านั้น
+  const res = await fetch(c.u+'/rest/v1/'+path, Object.assign({}, opt, {
+    headers: Object.assign(base, (opt&&opt.headers)||{})
+  }));
+  if(!res.ok){ let m=''; try{ m = await res.text(); }catch(e){} throw new Error('Supabase '+res.status+' — '+m.slice(0,180)); }
+  const t = await res.text(); return t ? JSON.parse(t) : null;
+}
+async function cloudPushScan(r){
+  const c = r._calc||{};
+  return sbFetch('jj3_scans?on_conflict=ts', {method:'POST', headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},
+    body: JSON.stringify([{ts:r._ts, area:r.area||'', grade:c.grade||r.grade||'', lp_pct:(c.lpPct!=null?c.lpPct:null), rd_pct:(c.rdPct!=null?c.rdPct:null),
+      d_lp:(c.dLP!=null?c.dLP:null), d_rd:(c.dRD!=null?c.dRD:null), lat:(isFinite(r.lat)?r.lat:null), lng:(isFinite(r.lng)?r.lng:null), data:r}])});
+}
+async function cloudPullScans(){
+  const rows = await sbFetch('jj3_scans?select=data&order=ts.desc&limit=1000', {method:'GET'});
+  return (rows||[]).map(x=>x.data).filter(Boolean);
+}
+async function cloudDeleteScan(ts){ return sbFetch('jj3_scans?ts=eq.'+encodeURIComponent(ts), {method:'DELETE', headers:{'Prefer':'return=minimal'}}); }
+async function cloudPushQ(items){
+  if(!items || !items.length) return;
+  return sbFetch('jj3_queue_spots?on_conflict=key', {method:'POST', headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},
+    body: JSON.stringify(items.map(it=>({key:qKeyOf(it), name:it.name, lat:it.lat, lng:it.lng, zone:it.zone||'', type:it.type||'',
+      queue_evidence:it.queue_evidence||'', rating:String(it.rating||''), reviews:(Number(it.reviews)||null), url:it.url||'', src:it.src||'',
+      pid:it.pid||'', rv:(it.rv&&it.rv.length? it.rv : null), hist:(it.hist&&it.hist.length? it.hist : null), deep:(it.deep||null)})))});
+}
+async function cloudPullQ(){
+  const rows = await sbFetch('jj3_queue_spots?select=*&limit=3000', {method:'GET'});
+  return (rows||[]).map(x=>({name:x.name, lat:Number(x.lat), lng:Number(x.lng), zone:x.zone||'', type:x.type||'',
+    queue_evidence:x.queue_evidence||'', rating:x.rating||'', reviews:x.reviews||'', url:x.url||'', src:x.src||'',
+    pid:x.pid||'', rv:(x.rv||null), hist:(x.hist||null), deep:(x.deep||null)}));
+}
+function updateSyncBadge(){
+  const el = $('sbStatus'); if(!el) return;
+  if(!sbCfg()){ el.textContent = 'ยังไม่เชื่อมคลาวด์ — ประวัติเก็บเฉพาะเครื่องนี้ (50 รายการล่าสุด)'; return; }
+  el.textContent = (SYNC_STATE==='ok')
+    ? ('เชื่อม Supabase แล้ว — ประวัติทั้งหมด '+loadHist().length+' รายการ + ร้านคิวยาว '+loadQData().items.length+' ร้าน ซิงก์ทุกเครื่อง')
+    : (SYNC_STATE==='off' ? 'ตั้งค่าแล้ว — กด "บันทึก + ซิงก์เดี๋ยวนี้" เพื่อเชื่อม' : 'ซิงก์ล่าสุดไม่สำเร็จ: '+SYNC_STATE.replace('err:',''));
+}
+async function syncFromCloud(showErr){
+  const c = sbCfg(); if(!c){ updateSyncBadge(); return; }
+  try{
+    const cloud = await cloudPullScans();
+    const local = loadHist();
+    const seen = new Set(cloud.map(x=>x._ts));
+    const toPush = local.filter(x=>x._ts && !seen.has(x._ts));
+    const merged = cloud.concat(toPush).sort((a,b)=>(b._ts||0)-(a._ts||0));
+    saveHist(merged); renderHist();
+    for(const r of toPush){ try{ await cloudPushScan(r); }catch(e){} }
+    const qc = await cloudPullQ();
+    const d = loadQData();
+    const qSeen = new Set(qc.map(qKeyOf));
+    const localOnly = d.items.filter(it=>!qSeen.has(qKeyOf(it)));
+    d.items = qc.concat(localOnly); saveQData(d);
+    if(localOnly.length){ try{ await cloudPushQ(localOnly); }catch(e){} }
+    SYNC_STATE = 'ok'; updateSyncBadge();
+    if(qMap) redrawQMarkers();
+  }catch(err){
+    SYNC_STATE = 'err:'+(err.message||err); updateSyncBadge();
+    if(showErr){ $('errBox').textContent = 'ซิงก์ Supabase ไม่สำเร็จ: '+(err.message||err); $('errBox').style.display='block'; }
+  }
+}
+
+/* ========== หน้า 2: แผนที่ร้านคิวยาว ========== */
+const QMAP_KEY = 'jj3_qmap_v1';
+const GKEY_KEY = 'jj3_gkey';
+const Q_ZONES = [
+  ['รามอินทรา–คู้บอน–สายไหม',13.845,100.645],['บางกะปิ–ลำสาลี–รามคำแหง',13.767,100.642],
+  ['ลาดพร้าว–วังหิน–โชคชัย 4',13.816,100.592],['รัชดา–ห้วยขวาง–สุทธิสาร',13.781,100.574],
+  ['เกษตร–นวมินทร์–นวลจันทร์',13.827,100.630],['งามวงศ์วาน–แคราย–ติวานนท์',13.856,100.530],
+  ['ดอนเมือง–สะพานใหม่',13.900,100.620],['มีนบุรี–หทัยราษฎร์',13.813,100.720],
+  ['บางนา–ศรีนครินทร์–อุดมสุข',13.670,100.630],['อ่อนนุช–พระโขนง–สวนหลวง',13.710,100.610],
+  ['ลาซาล–แบริ่ง–สำโรง',13.655,100.610],['พระราม 2–ท่าข้าม',13.660,100.440],
+  ['บางแค–เพชรเกษม',13.710,100.410],['ปิ่นเกล้า–จรัญสนิทวงศ์',13.780,100.480],
+  ['เมืองนนท์–รัตนาธิเบศร์',13.860,100.490],['ปากเกร็ด–แจ้งวัฒนะ–เมืองทอง',13.900,100.550],
+  ['รังสิต–ลำลูกกา–คูคต',13.980,100.620],['บางใหญ่–เวสต์เกต–บางบัวทอง',13.870,100.410],
+  ['สมุทรปราการ–เทพารักษ์',13.630,100.620],['ศาลายา–พุทธมณฑล–บรมราชชนนี',13.800,100.320]
+];
+const BUFFET_RE = /บุฟเฟ|ชาบู|สุกี|หมูกระทะ|ปิ้งย่าง|จิ้มจุ่ม|shabu|suki|grill|bbq|buffet|hotpot/i;
+
+let qMap = null, qEngine = '', qInfoW = null, qMarkers = [];
+function loadQData(){ try{ return JSON.parse(store.get(QMAP_KEY) || '{"items":[]}'); }catch(e){ return {items:[]}; } }
+function saveQData(d){ store.set(QMAP_KEY, JSON.stringify(d)); }
+function qKeyOf(it){ return (it.name||'') + '|' + Number(it.lat).toFixed(3) + '|' + Number(it.lng).toFixed(3); }
+function qTier(it){
+  const n = Number(it.reviews)||0;
+  if(n >= 1000) return {c:'#e5484d', t:'&ge;1,000 รีวิว'};
+  if(n >= 500)  return {c:'#ffd23f', t:'500–999 รีวิว'};
+  if(n >= 200)  return {c:'#58a66e', t:'200–499 รีวิว'};
+  return null; // ต่ำกว่า 200 หรือไม่ทราบ — ไม่ปักหมุด
+}
+function snapPush(hist, it){
+  const n = Number(it.reviews)||0, r = Number(it.rating)||null;
+  if(!n) return hist||[];
+  hist = hist||[];
+  const last = hist[hist.length-1];
+  if(last && last.n === n && (Date.now()-last.t) < 20*3600*1000) return hist;
+  hist.push({t:Date.now(), n:n, r:r});
+  return hist.slice(-60);
+}
+function mergeQItems(cur, add){
+  const idx = {}; cur.forEach(it=>{ idx[qKeyOf(it)] = it; });
+  let n = 0;
+  add.forEach(it=>{
+    if(!(it && it.name && isFinite(it.lat) && isFinite(it.lng))) return;
+    const k = qKeyOf(it), ex = idx[k];
+    if(!ex){ it.hist = snapPush([], it); idx[k] = it; cur.push(it); n++; }
+    else{
+      if(it.pid && !ex.pid) ex.pid = it.pid;
+      if(it.url && !ex.url) ex.url = it.url;
+      if(it.rating) ex.rating = it.rating;
+      if(it.reviews) ex.reviews = it.reviews;
+      if(!ex.queue_evidence && it.queue_evidence) ex.queue_evidence = it.queue_evidence;
+      ex.hist = snapPush(ex.hist, ex); // สแกนซ้ำ = บันทึกยอดรีวิวรอบใหม่ ไว้คำนวณอัตราเพิ่ม
+    }
+  });
+  return n;
+}
+
+/* ---------- map engine (Google ถ้ามี key / Leaflet เป็นสำรอง) ---------- */
+function initQueueMap(){
+  if(qMap) return;
+  const gk = (store.get(GKEY_KEY) || '').trim();
+  if(gk){ loadGoogleMap(gk); } else { initLeafletMap(); }
+}
+function initLeafletMap(){
+  qEngine = 'l';
+  qMap = L.map('qmap').setView([13.78, 100.55], 10);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19, attribution: '&copy; OpenStreetMap &copy; CARTO'
+  }).addTo(qMap);
+  redrawQMarkers();
+}
+function loadGoogleMap(gk){
+  window.__jjGInit = function(){
+    qEngine = 'g';
+    qMap = new google.maps.Map(document.getElementById('qmap'), {
+      center:{lat:13.78,lng:100.55}, zoom:10,
+      mapTypeControl:false, streetViewControl:false, fullscreenControl:true
+    });
+    qInfoW = new google.maps.InfoWindow();
+    redrawQMarkers();
+  };
+  const s = document.createElement('script');
+  s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(gk) + '&callback=__jjGInit&language=th&region=TH';
+  s.onerror = function(){ $('qErr').textContent = 'โหลด Google Maps ไม่สำเร็จ — เช็ค key/การเปิดใช้ Maps JavaScript API (ใช้แผนที่สำรองไปก่อน)'; $('qErr').style.display='block'; initLeafletMap(); };
+  document.head.appendChild(s);
+}
+function clearQMarkers(){
+  qMarkers.forEach(m=>{ if(qEngine==='l') qMap.removeLayer(m); else m.setMap(null); });
+  qMarkers = [];
+}
+function addQMarker(lat, lng, color, html, big){
+  if(!qMap) return null;
+  if(qEngine === 'l'){
+    const mk = L.circleMarker([lat,lng], {radius: big?9:7, color:'#fff', weight:1, fillColor:color, fillOpacity:.9}).addTo(qMap);
+    mk.bindPopup(html, {maxWidth:280});
+    qMarkers.push(mk); return mk;
+  }
+  const mk = new google.maps.Marker({
+    position:{lat:Number(lat), lng:Number(lng)}, map:qMap,
+    icon:{path:google.maps.SymbolPath.CIRCLE, scale: big?10:8, fillColor:color, fillOpacity:.92, strokeColor:'#fff', strokeWeight:1.2}
+  });
+  mk.addListener('click', ()=>{ qInfoW.setContent('<div style="color:#222;font-family:Sarabun">'+html+'</div>'); qInfoW.open(qMap, mk); });
+  qMarkers.push(mk); return mk;
+}
+function panQTo(lat, lng, mk){
+  if(qEngine === 'l'){ qMap.setView([lat,lng], 14); if(mk) mk.openPopup(); }
+  else { qMap.setCenter({lat:Number(lat), lng:Number(lng)}); qMap.setZoom(14); if(mk) google.maps.event.trigger(mk, 'click'); }
+}
+function gmapsLink(it){
+  return it.url || ('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(it.name) + '&center=' + it.lat + ',' + it.lng);
+}
+function redrawQMarkers(){
+  if(!qMap) return;
+  clearQMarkers();
+  addQMarker(BRANCHES.LP.lat, BRANCHES.LP.lng, '#d9a036', '<b>จริงใจหมูกระทะ ลาดพร้าววังหิน</b><br>สาขา 1 — ~4 ลบ./เดือน', true);
+  addQMarker(BRANCHES.RD.lat, BRANCHES.RD.lng, '#d9a036', '<b>จริงใจหมูกระทะ รัชดา</b><br>สาขา 2 — เดือนแรก 7.5 ลบ.', true);
+  loadHist().forEach(x=>{
+    if(isFinite(x.lat) && isFinite(x.lng)){
+      const c = x._calc || {};
+      addQMarker(x.lat, x.lng, '#6e8fb2', '<b>'+esc(x.area||'ทำเลที่สแกน')+'</b><br>เกรด '+esc(c.grade||x.grade||'-')+' • A '+(c.lpPct??'-')+'% / B '+(c.rdPct??'-')+'%');
+    }
+  });
+  const only = $('qBuffetOnly').checked;
+  const items = loadQData().items.filter(it => !only || BUFFET_RE.test((it.name||'')+' '+(it.type||'')));
+  const mks = {};
+  let plotted = 0;
+  items.forEach(it=>{
+    const tier = qTier(it);
+    if(!tier) return; // ต่ำกว่า 200 รีวิว/ไม่ทราบ — ไม่ปักหมุด
+    plotted++;
+    const html = '<b>'+esc(it.name)+'</b><br>'+esc(it.zone||'')+(it.type?' • '+esc(it.type):'')+
+      (it.rating?'<br>คะแนน '+esc(it.rating)+(it.reviews?' ('+Number(it.reviews).toLocaleString()+' รีวิว — '+tier.t+')':''):'')+
+      '<br><i>'+esc(it.queue_evidence||'')+'</i>'+
+      '<br><a target="_blank" rel="noopener" href="'+esc(gmapsLink(it))+'">เปิดใน Google Maps</a>';
+    mks[qKeyOf(it)] = addQMarker(it.lat, it.lng, tier.c, html, (Number(it.reviews)||0) >= 1000);
+  });
+  renderQList(items, mks);
+  const hidden = items.length - plotted;
+  $('qStatus').textContent = items.length
+    ? ('บนแผนที่ '+plotted+' ร้าน'+(hidden>0?(' • ซ่อน '+hidden+' ร้านที่ต่ำกว่า 200 รีวิว/ไม่ทราบยอด (ดูได้ในรายการ)'):'')+(loadQData().updated?(' • อัปเดต '+fmtDate(loadQData().updated)):''))
+    : 'ยังไม่มีข้อมูล — กดปุ่มรวบรวมด้านบนได้เลย';
+}
+function renderQList(items, mks){
+  const sorted = items.slice().sort((a,b)=>(Number(b.reviews)||0)-(Number(a.reviews)||0));
+  $('qList').innerHTML = sorted.map(it=>{
+    const k = esc(qKeyOf(it));
+    return '<div class="qrow" data-k="'+k+'" data-lat="'+it.lat+'" data-lng="'+it.lng+'">'+
+      '<span class="rv">'+(it.reviews? Number(it.reviews).toLocaleString()+' รีวิว':'')+(it.rating? ' • '+it.rating+'★':'')+'</span>'+
+      '<i class="tdot" style="background:'+((qTier(it)||{c:'#57504a'}).c)+'"></i><b>'+esc(it.name)+'</b>'+
+      '<div class="d">'+esc(it.zone||'')+(it.type?' • '+esc(it.type):'')+' — '+esc(it.queue_evidence||'')+'</div>'+
+      '<div class="qact"><button class="qmini" data-rvbtn="'+k+'">อ่านรีวิว</button>'+
+      '<button class="qmini" data-deepbtn="'+k+'">สืบประวัติ (AI)</button>'+
+      '<a class="qmini" target="_blank" rel="noopener" href="'+esc(gmapsLink(it))+'">เปิดใน Google Maps</a></div>'+
+      '<div class="qrev" data-rvpanel="'+k+'" style="display:none"></div>'+
+    '</div>';
+  }).join('');
+  $('qList').querySelectorAll('.qrow').forEach(el=>{
+    el.addEventListener('click', e=>{
+      if(e.target.closest('.qmini') || e.target.closest('.qrev')) return;
+      panQTo(Number(el.getAttribute('data-lat')), Number(el.getAttribute('data-lng')), null);
+    });
+  });
+  $('qList').querySelectorAll('[data-rvbtn]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const k = btn.getAttribute('data-rvbtn');
+      const panel = $('qList').querySelector('[data-rvpanel="'+k.replace(/"/g,'\\"')+'"]');
+      if(panel) toggleReviews(k, panel);
+    });
+  });
+  $('qList').querySelectorAll('[data-deepbtn]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const k = btn.getAttribute('data-deepbtn');
+      const panel = $('qList').querySelector('[data-rvpanel="'+k.replace(/"/g,'\\"')+'"]');
+      if(panel) deepDive(k, panel);
+    });
+  });
+}
+function rvHtml(it){
+  let head = '<div class="d">คะแนนรวม '+esc(it.rating||'-')+'★ จากทั้งหมด '+(it.reviews? Number(it.reviews).toLocaleString():'-')+' รีวิว</div>';
+  const yr = {};
+  (it.rv||[]).forEach(r=>{
+    if(r.p){ const y = new Date(r.p).getFullYear()+543; if(!yr[y]) yr[y]={c:0,s:0}; yr[y].c++; yr[y].s += (Number(r.r)||0); }
+  });
+  const ys = Object.keys(yr).sort((a,b)=>Number(b)-Number(a));
+  if(ys.length){
+    head += '<div class="d">รีวิวเด่น '+(it.rv||[]).length+' รายการที่ API ให้ กระจายตามปี (ไม่ใช่ทุกรีวิว — Google ไม่เปิดฮิสโตแกรมรายปีทั้งหมด): '+
+      ys.map(y=>'พ.ศ. '+y+' ×'+yr[y].c+' เฉลี่ย '+(yr[y].s/yr[y].c).toFixed(1)+'★').join(' · ')+'</div>';
+  }
+  const h = it.hist||[];
+  if(h.length >= 2){
+    const a = h[0], b = h[h.length-1];
+    const days = Math.max(1, (b.t-a.t)/86400000);
+    head += '<div class="d">อัตรารีวิวเพิ่มที่วัดจริง: ~'+Math.round((b.n-a.n)/days*7).toLocaleString()+' รีวิว/สัปดาห์ (ช่วง '+fmtDate(a.t)+' → '+fmtDate(b.t)+' • '+Number(a.n).toLocaleString()+' → '+Number(b.n).toLocaleString()+' รีวิว)</div>';
+  }else{
+    head += '<div class="d">เริ่มบันทึกยอดรีวิวของร้านนี้แล้ว — สแกนโซนซ้ำ/กดอ่านรีวิวอีกครั้งในสัปดาห์หน้า ระบบจะคำนวณ "อัตรารีวิวเพิ่ม/สัปดาห์" ให้อัตโนมัติ (ตัววัดว่าร้านกำลังมาแรงหรือแผ่ว)</div>';
+  }
+  head += '<div class="d">อ่านรีวิวครบทุกรายการที่ปุ่ม "เปิดใน Google Maps"</div>';
+  const deep = it.deep ? ('<div class="qrv-item"><b>ประวัติร้าน (AI ค้นเว็บ):</b> เปิดเมื่อ: '+esc(it.deep.opened||'-')+' · กระแส: '+esc(it.deep.trend||'-')+(it.deep.why?('<br>เหตุที่คิวยาว: '+esc(it.deep.why)):'')+'</div>') : '';
+  const body = (it.rv||[]).map(r=>(
+    '<div class="qrv-item"><b>'+esc(r.r)+'★</b> · '+esc(r.t||'')+'<br>'+esc(r.x||'')+'<div class="d">— '+esc(r.a||'ผู้ใช้ Google')+'</div></div>'
+  )).join('');
+  return head + deep + (body || '<div class="d">ร้านนี้ไม่มีข้อความรีวิวส่งมาจาก API — กด "สืบประวัติ (AI)" หรือเปิดใน Google Maps</div>');
+}
+async function deepDive(k, panel){
+  panel.style.display = 'block';
+  const d = loadQData();
+  const it = d.items.find(x=>qKeyOf(x)===k);
+  if(!it){ panel.innerHTML = '<div class="d">ไม่พบข้อมูลร้าน</div>'; return; }
+  if(it.deep){ panel.innerHTML = rvHtml(it); return; }
+  const before = panel.innerHTML;
+  panel.innerHTML = '<div class="d">กำลังสืบประวัติร้านจากเว็บ (~30–60 วินาที)…</div>';
+  try{
+    const p = 'ใช้ web_search (2-4 ครั้ง) ค้นข้อมูลร้านอาหาร "'+it.name+'" ย่าน '+(it.zone||'กรุงเทพฯ/ปริมณฑล')+' เพื่อตอบ: 1) ร้านเปิด/ก่อตั้งเมื่อไหร่ (วันที่หรือปี พ.ศ.) 2) กระแสตอนนี้ขาขึ้นหรือขาลง มีข่าว/การขยายสาขา/เหตุการณ์อะไรล่าสุด 3) เหตุผลหลักที่คนต่อคิว ตอบเป็น JSON ล้วนเท่านั้น: {"opened":"...","trend":"...","why":"..."} กติกา: ตอบจากข้อมูลที่ค้นพบจริงเท่านั้น ข้อไหนหาไม่เจอให้ใส่ "ไม่พบข้อมูล" ห้ามเดา แต่ละ field สั้นไม่เกิน 1-2 ประโยค';
+    const out = await apiCall({ model: MODEL_NAME, max_tokens: 1200, messages: [{role:'user', content: p}],
+      tools: [{type:'web_search_20250305', name:'web_search', max_uses:4}] });
+    let t = out.text.replace(/```json|```/g,'').trim();
+    const s = t.indexOf('{'), e = t.lastIndexOf('}');
+    if(s===-1 || e===-1) throw new Error('ไม่ได้คำตอบที่ใช้ได้ — ลองกดใหม่');
+    it.deep = JSON.parse(t.slice(s, e+1));
+    saveQData(d);
+    cloudPushQ([it]).catch(()=>{});
+    panel.innerHTML = rvHtml(it);
+  }catch(err){
+    panel.innerHTML = before + '<div class="d">สืบประวัติไม่สำเร็จ: '+esc(err.message||err)+'</div>';
+  }
+}
+async function gplaceDetails(pid, gk){
+  const res = await fetch('https://places.googleapis.com/v1/places/'+encodeURIComponent(pid), {
+    headers:{'X-Goog-Api-Key':gk, 'X-Goog-FieldMask':'rating,userRatingCount,reviews'}
+  });
+  if(!res.ok){ let m=''; try{ const j=await res.json(); m=(j.error&&j.error.message)||''; }catch(e){}
+    throw new Error('Place Details '+res.status+(m?' — '+m:'')); }
+  return res.json();
+}
+async function toggleReviews(k, panel){
+  if(panel.style.display === 'block'){ panel.style.display='none'; return; }
+  panel.style.display = 'block';
+  const d = loadQData();
+  const it = d.items.find(x=>qKeyOf(x)===k);
+  if(!it){ panel.innerHTML = '<div class="d">ไม่พบข้อมูลร้าน</div>'; return; }
+  if(it.rv && it.rv.length){ panel.innerHTML = rvHtml(it); return; }
+  const gk = (($('inGKey').value||'').trim()) || ((store.get(GKEY_KEY)||'').trim());
+  if(!gk){ panel.innerHTML = '<div class="d">การดึงข้อความรีวิวต้องมี Google Maps API key (ช่องด้านบน) — ระหว่างนี้กด "เปิดใน Google Maps" อ่านได้เลย</div>'; return; }
+  panel.innerHTML = '<div class="d">กำลังดึงรีวิว…</div>';
+  try{
+    if(!it.pid){
+      const cand = await gplacesSearch(it.name, Number(it.lat), Number(it.lng), gk);
+      if(!cand.length || !cand[0].id) throw new Error('หา place id ของร้านนี้ไม่เจอ — ลองสแกนโซนนี้ใหม่');
+      it.pid = cand[0].id;
+    }
+    const det = await gplaceDetails(it.pid, gk);
+    if(det.rating) it.rating = det.rating;
+    if(det.userRatingCount) it.reviews = det.userRatingCount;
+    it.rv = (det.reviews||[]).slice(0,5).map(r=>({
+      r: r.rating||'', t: r.relativePublishTimeDescription||'',
+      p: r.publishTime||'',
+      x: (r.text&&r.text.text) || (r.originalText&&r.originalText.text) || '',
+      a: (r.authorAttribution&&r.authorAttribution.displayName) || ''
+    }));
+    it.hist = snapPush(it.hist, it);
+    saveQData(d);
+    cloudPushQ([it]).catch(()=>{});
+    panel.innerHTML = rvHtml(it);
+  }catch(err){
+    panel.innerHTML = '<div class="d">ดึงรีวิวไม่สำเร็จ: '+esc(err.message||err)+'</div>';
+  }
+}
+
+/* ---------- โหมด AI: กวาดรีวิว/บทความด้วย key เดิม ---------- */
+async function qFetchAI(){
+  const p = 'รวบรวมร้านอาหารในกรุงเทพฯและปริมณฑล (นนทบุรี ปทุมธานี สมุทรปราการ) ที่ขึ้นชื่อเรื่อง "คิวยาว คิวเยอะ รอคิวนาน รอนาน คนเยอะ" โดยใช้ web_search ค้นจากรีวิว Google Maps บทความรีวิวร้าน และข่าว (ค้นอย่างน้อย 5 ครั้ง เช่น "ร้านคิวยาวที่สุด กรุงเทพ", "บุฟเฟ่ต์ คิวยาว รอนาน", "หมูกระทะ คิวเยอะ", "สุกี้ ชาบู ต่อคิว", "ร้านดัง รอคิวนาน ปริมณฑล") เน้นหมวดบุฟเฟต์/ชาบู/สุกี้/หมูกระทะ/ปิ้งย่างก่อน แล้วเสริมร้านดังหมวดอื่น รวม 35-55 ร้าน ตอบเป็น JSON array ล้วนห้ามมีข้อความอื่น: [{"name":"ชื่อร้าน+สาขา","lat":13.0,"lng":100.0,"zone":"ย่าน","type":"หมวด เช่น หมูกระทะ/ชาบู/ก๋วยเตี๋ยว","queue_evidence":"หลักฐานคิวสั้นๆ จากรีวิว/บทความ","rating":4.5,"reviews":1200,"url":"ลิงก์ Google Maps ถ้ามี"}] กติกา: lat/lng ต้องเป็นพิกัดจริงของสาขานั้น ถ้าไม่มั่นใจพิกัดให้ตัดร้านนั้นทิ้ง ห้ามกุ | rating/reviews ใส่เฉพาะที่รู้จริง ไม่รู้ให้เว้น field | แต่ละ field สั้นกระชับ';
+  const out = await apiCall({ model: MODEL_NAME, max_tokens: 8000, messages:[{role:'user',content:p}], tools:[{type:'web_search_20250305', name:'web_search', max_uses:10}] });
+  let t = out.text.replace(/```json|```/g,'').trim();
+  const s = t.indexOf('['), e = t.lastIndexOf(']');
+  if(s===-1 || e===-1) throw new Error('ไม่พบข้อมูลรายการร้านในคำตอบ — ลองกดใหม่');
+  const arr = JSON.parse(t.slice(s, e+1));
+  return arr.map(it=>({name:it.name, lat:Number(it.lat), lng:Number(it.lng), zone:it.zone||'', type:it.type||'', queue_evidence:it.queue_evidence||'', rating:it.rating||'', reviews:it.reviews||'', url:it.url||'', src:'ai'}));
+}
+
+/* ---------- โหมด Google Places: สแกนสดรายโซน ---------- */
+async function gplacesSearch(q, lat, lng, gk){
+  const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'X-Goog-Api-Key': gk,
+      'X-Goog-FieldMask':'places.id,places.displayName,places.location,places.rating,places.userRatingCount,places.formattedAddress,places.googleMapsUri,places.primaryTypeDisplayName'
+    },
+    body: JSON.stringify({ textQuery:q, languageCode:'th', regionCode:'TH', maxResultCount:20,
+      locationBias:{circle:{center:{latitude:lat, longitude:lng}, radius:5000}} })
+  });
+  if(!res.ok){
+    let m=''; try{ const j=await res.json(); m=(j.error&&j.error.message)||''; }catch(e){}
+    throw new Error('Google Places '+res.status+(m?' — '+m:'')+' | เช็คว่าเปิดใช้ Places API (New) และ key ไม่ถูกจำกัดผิดโดเมน');
+  }
+  const j = await res.json();
+  return j.places || [];
+}
+async function qFetchGoogle(){
+  const gk = ($('inGKey').value || '').trim();
+  if(!gk) throw new Error('ต้องใส่ Google Maps API key ก่อน (ช่องด้านบน) — โหมดนี้ยิง Places API ตรง');
+  store.set(GKEY_KEY, gk);
+  const zi = Number($('qZone').value);
+  const z = Q_ZONES[zi];
+  const kws = ['ร้านอาหาร คิวยาว', 'บุฟเฟ่ต์ คิวเยอะ รอนาน', 'หมูกระทะ ชาบู รอคิว'];
+  const found = [];
+  for(const kw of kws){
+    $('qStatus').textContent = 'กำลังค้น "'+kw+'" ในโซน '+z[0]+'…';
+    const places = await gplacesSearch(kw, z[1], z[2], gk);
+    places.forEach(pl=>{
+      found.push({
+        pid: pl.id || '',
+        name: (pl.displayName && pl.displayName.text) || '',
+        lat: pl.location && pl.location.latitude, lng: pl.location && pl.location.longitude,
+        zone: z[0], type: (pl.primaryTypeDisplayName && pl.primaryTypeDisplayName.text) || '',
+        queue_evidence: 'ติดผลค้น Google: "'+kw+'"',
+        rating: pl.rating || '', reviews: pl.userRatingCount || '', url: pl.googleMapsUri || '', src:'google'
+      });
+    });
+  }
+  return found;
+}
+
+/* ---------- ปุ่ม/อีเวนต์หน้า 2 ---------- */
+async function runQFetch(btn, fn){
+  $('qErr').style.display='none';
+  btn.disabled = true; const t0 = btn.textContent; btn.textContent = 'กำลังรวบรวม…';
+  try{
+    const items = await fn();
+    const d = loadQData();
+    const n = mergeQItems(d.items, items);
+    d.updated = Date.now();
+    saveQData(d); redrawQMarkers();
+    cloudPushQ(items).then(()=>{ SYNC_STATE='ok'; updateSyncBadge(); }).catch(()=>{});
+    $('qStatus').textContent = 'เพิ่มใหม่ '+n+' ร้าน (รวม '+d.items.length+' ร้าน) • '+fmtDate(d.updated);
+  }catch(err){
+    $('qErr').textContent = String(err.message||err); $('qErr').style.display='block';
+  }finally{ btn.disabled = false; btn.textContent = t0; }
+}
+function switchTab(which){
+  const scan = which==='scan';
+  $('pageScan').style.display = scan ? 'block' : 'none';
+  $('pageQueue').style.display = scan ? 'none' : 'block';
+  $('tabScan').classList.toggle('active', scan);
+  $('tabQueue').classList.toggle('active', !scan);
+  if(!scan){
+    initQueueMap();
+    setTimeout(()=>{ if(qEngine==='l' && qMap) qMap.invalidateSize(); redrawQMarkers(); }, 60);
+  }
+}
+$('tabScan').addEventListener('click', ()=>switchTab('scan'));
+$('tabQueue').addEventListener('click', ()=>switchTab('queue'));
+$('btnQAi').addEventListener('click', ()=> runQFetch($('btnQAi'), qFetchAI));
+$('btnQGoogle').addEventListener('click', ()=> runQFetch($('btnQGoogle'), qFetchGoogle));
+$('qBuffetOnly').addEventListener('change', redrawQMarkers);
+$('btnQAnalyze').addEventListener('click', async ()=>{
+  const items = loadQData().items;
+  if(!items.length){ alert('ยังไม่มีข้อมูล — กดรวบรวมด้านบนก่อน'); return; }
+  const btn = $('btnQAnalyze'); btn.disabled = true; const t0 = btn.textContent; btn.textContent = 'กำลังวิเคราะห์…';
+  $('qErr').style.display = 'none';
+  try{
+    const lines = items.slice(0, 150).map(it=>{
+      let s = (it.name||'')+' | '+(it.zone||'')+' | '+(it.type||'-')+' | '+(it.reviews||'?')+' รีวิว '+(it.rating||'')+'★ | '+(it.queue_evidence||'');
+      if(it.rv && it.rv.length){ s += ' | เสียงลูกค้า: '+it.rv.slice(0,2).map(r=>String(r.x||'').replace(/\s+/g,' ').slice(0,110)).join(' / '); }
+      return s;
+    }).join('\n');
+    const p = 'คุณคือนักวิเคราะห์ธุรกิจร้านอาหารของ "จริงใจหมูกระทะ" (บุฟเฟต์หมูกระทะ+ชาบูในโต๊ะเดียว 239/329+ชุดน้ำ 59 เปิด 11:00-02:00 มี 2 สาขา: ลาดพร้าววังหิน ~4 ลบ./เดือน และรัชดา 7.5 ลบ.เดือนแรก กำลังหาทำเลสาขา 3 แบบ 350-500 ตรม. จอด 30+ คัน เพดานเช่า 150-200K)\n\nข้อมูลร้านคิวยาวที่รวบรวมจาก Google Maps ('+items.length+' ร้าน) รูปแบบ: ชื่อ | โซน | หมวด | รีวิว | หลักฐานคิว | เสียงลูกค้า\n'+lines+'\n\nวิเคราะห์เป็นภาษาไทย กระชับ เป็นหัวข้อ:\n1) จุดร่วมของร้านคิวยาวชุดนี้ (หมวดไหนครอง ราคา ช่วงเวลา รูปแบบร้าน)\n2) จัดอันดับโซนตามความหนาแน่นของ demand จากข้อมูลนี้\n3) ช่องว่างของ "หมูกระทะ+ชาบูในโต๊ะเดียว format ใหญ่": โซนที่คิวยาวเยอะแต่ยังไม่มีคู่แข่งสายตรง\n4) บทเรียนจากเสียงลูกค้า: อะไรทำให้คนยอมต่อคิว อะไรที่คนบ่น — จริงใจควรทำ/เลี่ยงอะไร\n5) ข้อเสนอ 3 ข้อที่ลงมือได้จริงสำหรับสาขา 3\nอิงเฉพาะข้อมูลที่ให้ ถ้าข้อมูลบางโซนน้อยให้บอกว่ายังสแกนไม่พอ ห้ามกุตัวเลข';
+    const out = await apiCall({ model: MODEL_NAME, max_tokens: 4000, messages: [{role:'user', content: p}] });
+    $('qAnalysisOut').textContent = out.text.trim();
+    $('qAnalysisOut').style.display = 'block';
+    $('qAnalysisOut').scrollIntoView({behavior:'smooth', block:'start'});
+  }catch(err){
+    $('qErr').textContent = 'วิเคราะห์ไม่สำเร็จ: '+(err.message||err); $('qErr').style.display = 'block';
+  }finally{ btn.disabled = false; btn.textContent = t0; }
+});
+$('btnQExport').addEventListener('click', ()=>{
+  const d = loadQData();
+  if(!d.items.length){ alert('ยังไม่มีข้อมูลให้ดาวน์โหลด'); return; }
+  const blob = new Blob([JSON.stringify(d, null, 1)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const dt = new Date(), pad = n => String(n).padStart(2,'0');
+  a.download = 'jj3-queue-data-'+dt.getFullYear()+pad(dt.getMonth()+1)+pad(dt.getDate())+'.json';
+  a.click(); URL.revokeObjectURL(a.href);
+});
+$('btnQClear').addEventListener('click', ()=>{
+  if(!confirm('ล้างข้อมูลร้านคิวยาวทั้งหมด?')) return;
+  store.del(QMAP_KEY); redrawQMarkers();
+  if(sbCfg() && confirm('ลบบนคลาวด์ (Supabase) ด้วยไหม?')){
+    sbFetch('jj3_queue_spots?key=not.is.null',{method:'DELETE',headers:{'Prefer':'return=minimal'}}).then(updateSyncBadge).catch(()=>{});
+  }
+});
+$('btnSbSync').addEventListener('click', ()=>{
+  store.set(SBURL_KEY, $('inSbUrl').value.trim());
+  store.set(SBKEY_KEY, $('inSbKey').value.trim());
+  SYNC_STATE = 'off'; updateSyncBadge();
+  $('sbStatus').textContent = 'กำลังซิงก์…';
+  syncFromCloud(true);
+});
+
+/* ========== init ========== */
+(function init(){
+  const k = store.get(KEY_KEY); if(k) $('inApiKey').value = k;
+  const gk = store.get(GKEY_KEY); if(gk) $('inGKey').value = gk;
+  $('inSbUrl').value = store.get(SBURL_KEY) || SB_DEFAULT_URL;
+  $('inSbKey').value = store.get(SBKEY_KEY) || SB_DEFAULT_KEY;
+  updateSyncBadge();
+  syncFromCloud(false);
+  $('qZone').innerHTML = Q_ZONES.map((z,i)=>'<option value="'+i+'">'+esc(z[0])+'</option>').join('');
+  attachSugg('inSubdistrict','sgSub','sub');
+  attachSugg('inDistrict','sgDist','dist');
+  attachSugg('inProvince','sgProv','prov');
+  attachSugg('inZip','sgZip','zip');
+  renderHist();
+})();
+</script>
+</body>
+</html>
