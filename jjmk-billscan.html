@@ -1,514 +1,525 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>สแกนบิลผู้ขาย — JJ Stock</title>
+<title>JJ Site Scanner — เรดาร์ทำเลสาขา 3 | จริงใจหมูกระทะ</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --red:#C62127; --red-dark:#9E1A1F; --red-soft:#FDECEC;
-    --ink:#1F2328; --muted:#6B7280; --line:#E6E8EB;
-    --bg:#F5F6F8; --card:#FFFFFF; --ok:#0E8345; --ok-soft:#E7F6EE;
-    --warn:#B45309; --warn-soft:#FEF3E2;
+    --charcoal:#171310;      /* ถ่านเย็น */
+    --surface:#221c17;       /* เขม่า */
+    --surface2:#2b241d;
+    --line:#3a322b;
+    --ash:#9c8f81;           /* ขี้เถ้า */
+    --paper:#f2eae0;         /* ข้อความหลัก */
+    --emberA:#e5484d;        /* โมเดล A ลาดพร้าววังหิน */
+    --emberA-deep:#b3261e;
+    --modelB:#6e8fb2;        /* โมเดล B รัชดา */
+    --pass:#58a66e;
+    --warn:#d9a036;
+    --fail:#e5484d;
   }
-  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
-  html,body{margin:0; padding:0}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
   body{
-    font-family:'Prompt', -apple-system, 'Segoe UI', Tahoma, sans-serif;
-    background:var(--bg); color:var(--ink);
-    min-height:100dvh; padding-bottom:env(safe-area-inset-bottom);
+    background:var(--charcoal);
+    color:var(--paper);
+    font-family:'Sarabun',Tahoma,sans-serif;
+    font-size:16px;line-height:1.6;
+    background-image:radial-gradient(ellipse 90% 50% at 50% -10%, rgba(229,72,77,.10), transparent 60%);
+    min-height:100vh;
   }
-  header{
-    background:var(--red); color:#fff;
-    padding:calc(14px + env(safe-area-inset-top)) 16px 14px;
-    position:sticky; top:0; z-index:20;
-  }
-  header h1{margin:0; font-size:17px; font-weight:600; display:flex; align-items:center; gap:8px}
-  header .sub{font-size:12px; opacity:.85; font-weight:400; margin-top:2px}
-  main{max-width:640px; margin:0 auto; padding:14px 14px 40px}
+  .wrap{max-width:860px;margin:0 auto;padding:20px 16px 90px}
+  h1,h2,h3,.num{font-family:'Kanit','Sarabun',sans-serif}
 
-  .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:12px}
-  .hint{font-size:12.5px; color:var(--muted); margin:0 0 10px}
+  /* ---------- header ---------- */
+  header{display:flex;align-items:center;gap:14px;padding:6px 0 20px}
+  .brandmark{
+    width:52px;height:52px;border-radius:50%;flex:none;
+    background:conic-gradient(from 210deg, #3a2a1e, #6b3324, var(--emberA), #6b3324, #3a2a1e);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 0 22px rgba(229,72,77,.35), inset 0 0 0 3px #171310, inset 0 0 0 4px #4a3b2e;
+  }
+  .brandmark span{font-family:'Kanit';font-weight:700;font-size:19px;color:#ffe9d6;text-shadow:0 1px 2px #000}
+  .brand-eyebrow{font-size:12.5px;letter-spacing:.14em;color:var(--emberA);font-weight:600}
+  header h1{font-size:24px;font-weight:600;line-height:1.25}
+  header .sub{font-size:13px;color:var(--ash)}
 
-  /* ---------- ปุ่ม ---------- */
-  .btn{
-    display:flex; align-items:center; justify-content:center; gap:8px;
-    border:none; border-radius:12px; padding:14px 16px; width:100%;
-    font-family:inherit; font-size:16px; font-weight:600; cursor:pointer;
-    background:#fff; color:var(--ink); border:1.5px solid var(--line);
+  /* ---------- panels ---------- */
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 16px;margin-bottom:16px}
+  .panel h2{font-size:17px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .panel h2 .dot{width:8px;height:8px;border-radius:50%;background:var(--emberA);box-shadow:0 0 8px var(--emberA)}
+  label{display:block;font-size:13px;color:var(--ash);margin:10px 0 4px}
+  input,select,textarea{
+    width:100%;font-size:16px;font-family:'Sarabun';
+    background:var(--charcoal);color:var(--paper);
+    border:1px solid var(--line);border-radius:10px;padding:11px 12px;outline:none;
   }
-  .btn:active{transform:scale(.985)}
-  .btn.primary{background:var(--red); color:#fff; border-color:var(--red)}
-  .btn.primary:active{background:var(--red-dark)}
-  .btn.ghost{background:transparent; border-style:dashed}
-  .btn[disabled]{opacity:.45; pointer-events:none}
-  .btn-row{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px}
-  .btn-sm{width:auto; padding:9px 14px; font-size:14px; border-radius:10px}
+  input:focus,select:focus{border-color:var(--emberA);box-shadow:0 0 0 3px rgba(229,72,77,.18)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+  @media(max-width:560px){.grid2{grid-template-columns:1fr}}
 
-  /* ---------- รูปที่เลือก ---------- */
-  .pages{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px}
-  .pages:empty{display:none}
-  .page{
-    position:relative; width:86px; height:112px; border-radius:10px; overflow:hidden;
-    border:1px solid var(--line); background:#eee;
+  .scan-btn{
+    width:100%;margin-top:18px;border:none;border-radius:12px;cursor:pointer;
+    font-family:'Kanit';font-size:18px;font-weight:600;letter-spacing:.02em;
+    padding:15px;color:#fff;
+    background:linear-gradient(180deg,var(--emberA),var(--emberA-deep));
+    box-shadow:0 4px 18px rgba(179,38,30,.4);
+    transition:transform .12s ease, box-shadow .12s ease;
   }
-  .page img{width:100%; height:100%; object-fit:cover; display:block}
-  .page .num{
-    position:absolute; left:6px; bottom:6px; background:rgba(0,0,0,.55); color:#fff;
-    font-size:11px; padding:1px 7px; border-radius:20px;
-  }
-  .page .rm{
-    position:absolute; top:4px; right:4px; width:24px; height:24px; border:none; border-radius:50%;
-    background:rgba(0,0,0,.55); color:#fff; font-size:14px; line-height:24px; cursor:pointer; padding:0;
-  }
+  .scan-btn:active{transform:scale(.985)}
+  .scan-btn:disabled{opacity:.55;cursor:wait}
+  @keyframes emberpulse{0%,100%{box-shadow:0 4px 18px rgba(179,38,30,.35)}50%{box-shadow:0 4px 30px rgba(229,72,77,.75)}}
+  .scan-btn.loading{animation:emberpulse 1.6s ease-in-out infinite}
+  @media (prefers-reduced-motion: reduce){.scan-btn.loading{animation:none}}
 
-  /* ---------- โหลด / error ---------- */
-  .loading{display:flex; flex-direction:column; align-items:center; gap:14px; padding:34px 16px; text-align:center}
-  .spinner{
-    width:44px; height:44px; border-radius:50%;
-    border:4px solid var(--red-soft); border-top-color:var(--red);
-    animation:spin .9s linear infinite;
-  }
-  @keyframes spin{to{transform:rotate(360deg)}}
-  .loading .t1{font-weight:600}
-  .loading .t2{font-size:13px; color:var(--muted)}
-  .errbox{
-    background:var(--red-soft); border:1px solid #F3C2C4; color:var(--red-dark);
-    border-radius:12px; padding:12px 14px; font-size:14px; margin-bottom:12px;
-    word-break:break-word;
-  }
+  .settings-toggle{background:none;border:none;color:var(--ash);font-family:'Sarabun';font-size:13px;cursor:pointer;text-decoration:underline dotted;margin-top:12px}
+  .settings{display:none;margin-top:8px;border-top:1px dashed var(--line);padding-top:6px}
+  .settings.open{display:block}
+  .hint{font-size:12.5px;color:var(--ash);margin-top:6px;line-height:1.5}
 
-  /* ---------- ฟอร์มผลลัพธ์ ---------- */
-  label.f{display:block; font-size:12.5px; color:var(--muted); margin:0 0 4px}
-  input, select{
-    font-family:inherit; font-size:16px; /* กัน iOS ซูม */
-    width:100%; padding:10px 12px; border:1.5px solid var(--line); border-radius:10px;
-    background:#fff; color:var(--ink); outline:none;
-  }
-  input:focus{border-color:var(--red)}
-  input.num{text-align:right; font-variant-numeric:tabular-nums}
-  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
-  .grid3{display:grid; grid-template-columns:1.4fr 1fr 1fr; gap:10px}
-  .mt10{margin-top:10px}
+  /* ---------- loading ---------- */
+  #loadingBox{display:none;text-align:center;padding:26px 14px}
+  .coal{width:64px;height:64px;margin:0 auto 14px;border-radius:50%;
+    background:radial-gradient(circle at 40% 35%, #ff9d6b, var(--emberA) 45%, #571512 80%);
+    filter:blur(.4px);animation:emberpulse 1.4s ease-in-out infinite;box-shadow:0 0 30px rgba(229,72,77,.5)}
+  #loadingMsg{font-family:'Kanit';font-size:16px;color:var(--paper)}
+  #loadingSub{font-size:13px;color:var(--ash);margin-top:4px}
 
-  .sec-title{
-    display:flex; align-items:center; justify-content:space-between;
-    margin:16px 2px 8px; font-size:14px; font-weight:600;
-  }
-  .sec-title .count{font-size:12px; color:var(--muted); font-weight:400}
+  /* ---------- result ---------- */
+  #resultBox{display:none}
+  .area-title{font-size:21px;font-weight:600}
+  .area-meta{font-size:13px;color:var(--ash);margin-top:2px}
+  .area-meta a{color:var(--modelB)}
+  .banner{border-radius:10px;padding:10px 14px;font-size:14.5px;margin:12px 0;font-weight:600}
+  .banner.fail{background:rgba(229,72,77,.14);border:1px solid rgba(229,72,77,.5);color:#ff9b9e}
+  .banner.warn{background:rgba(217,160,54,.12);border:1px solid rgba(217,160,54,.45);color:#e8c07a}
+  .banner.pass{background:rgba(88,166,110,.12);border:1px solid rgba(88,166,110,.45);color:#8fd3a5}
 
-  /* ---------- การ์ดรายการสินค้า ---------- */
-  .item{
-    background:var(--card); border:1px solid var(--line); border-radius:12px;
-    padding:11px 12px; margin-bottom:10px;
+  /* DNA gauge — ลายเซ็นของแอพ */
+  .dna{margin:18px 0 6px}
+  .dna-row{display:flex;align-items:center;gap:10px}
+  .dna-half{flex:1;height:22px;background:var(--charcoal);border:1px solid var(--line);position:relative;overflow:hidden}
+  .dna-half.left{border-radius:11px 0 0 11px}
+  .dna-half.right{border-radius:0 11px 11px 0}
+  .dna-fill{position:absolute;top:0;bottom:0;transition:width .9s cubic-bezier(.2,.8,.2,1)}
+  .dna-half.left .dna-fill{right:0;background:linear-gradient(270deg,var(--emberA),var(--emberA-deep))}
+  .dna-half.right .dna-fill{left:0;background:linear-gradient(90deg,#8fb0d4,var(--modelB))}
+  .grade-seal{
+    width:64px;height:64px;flex:none;border-radius:50%;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    border:2px solid var(--line);background:var(--surface2);
+    font-family:'Kanit';
   }
-  .item .row1{display:flex; gap:8px; align-items:center; margin-bottom:8px}
-  .item .no{
-    flex:0 0 auto; width:26px; height:26px; border-radius:8px; background:var(--red-soft);
-    color:var(--red); font-size:12.5px; font-weight:600; display:flex; align-items:center; justify-content:center;
-  }
-  .item .name{flex:1}
-  .item .del{
-    flex:0 0 auto; width:32px; height:32px; border:none; border-radius:9px;
-    background:#F3F4F6; color:#9CA3AF; font-size:16px; cursor:pointer;
-  }
-  .item .del:active{background:var(--red-soft); color:var(--red)}
-  .item .row2{display:grid; grid-template-columns:1fr .9fr 1.1fr 1.2fr; gap:7px}
-  .item .cell label{display:block; font-size:10.5px; color:var(--muted); margin:0 0 3px}
-  .item .cell input{padding:8px 8px; font-size:16px; border-radius:9px}
+  .grade-seal .g{font-size:24px;font-weight:700;line-height:1}
+  .grade-seal .t{font-size:10px;color:var(--ash)}
+  .dna-labels{display:flex;justify-content:space-between;margin-top:6px;font-size:13px}
+  .dna-labels .num{font-size:20px;font-weight:600}
+  .dna-labels .lp{color:var(--emberA);text-align:left}
+  .dna-labels .rd{color:#9dbede;text-align:right}
+  .dna-labels small{display:block;color:var(--ash);font-size:12px;font-family:'Sarabun'}
 
-  /* ---------- สรุปยอด ---------- */
-  .totals .rowt{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 0}
-  .totals .rowt + .rowt{border-top:1px dashed var(--line)}
-  .totals .lab{font-size:14px; color:var(--muted)}
-  .totals .val{font-size:15px; font-weight:600; font-variant-numeric:tabular-nums}
-  .totals input{max-width:150px; text-align:right}
-  .badge{
-    display:inline-flex; align-items:center; gap:6px; border-radius:20px;
-    padding:6px 12px; font-size:13px; font-weight:600; margin-top:10px;
-  }
-  .badge.ok{background:var(--ok-soft); color:var(--ok)}
-  .badge.warn{background:var(--warn-soft); color:var(--warn)}
-  .notes{
-    background:var(--warn-soft); border:1px solid #F5DFB8; color:#7C4A03;
-    border-radius:10px; padding:10px 12px; font-size:13px; margin-top:10px;
-  }
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+  .chip{font-size:13px;padding:5px 12px;border-radius:99px;border:1px solid var(--line);background:var(--surface2)}
+  .chip b{font-family:'Kanit';font-weight:600}
+  .chip.pass{border-color:rgba(88,166,110,.6);color:#8fd3a5}
+  .chip.warn{border-color:rgba(217,160,54,.6);color:#e8c07a}
+  .chip.fail{border-color:rgba(229,72,77,.6);color:#ff9b9e}
 
-  .export-row{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px}
-  .toast{
-    position:fixed; left:50%; bottom:calc(24px + env(safe-area-inset-bottom)); transform:translateX(-50%);
-    background:var(--ink); color:#fff; font-size:13.5px; padding:9px 16px; border-radius:20px;
-    opacity:0; pointer-events:none; transition:opacity .25s; z-index:50; white-space:nowrap;
-  }
-  .toast.show{opacity:1}
-  [hidden]{display:none !important}
+  .sec-label{font-size:12.5px;letter-spacing:.12em;color:var(--emberA);font-weight:600;margin:20px 0 6px;font-family:'Kanit'}
+  .kv p{margin:6px 0;font-size:15px}
+  .kv b{color:#fff}
+
+  table{width:100%;border-collapse:collapse;margin:8px 0;font-size:14px}
+  th{font-family:'Kanit';font-weight:500;font-size:13px;color:var(--ash);text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
+  td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+  td.sc{font-family:'Kanit';font-weight:600;text-align:center;width:52px}
+  td.sc.a{color:var(--emberA)} td.sc.b{color:#9dbede}
+  .why{color:var(--ash);font-size:13.5px}
+
+  .comp-item,.rent-item{padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin:8px 0;background:var(--surface2)}
+  .comp-item b{font-family:'Kanit';font-weight:500}
+  .comp-item .km{float:right;color:var(--warn);font-family:'Kanit';font-size:13px}
+  .comp-item .d,.rent-item .d{font-size:13.5px;color:var(--ash);margin-top:2px}
+  .rent-item .price{color:#8fd3a5;font-family:'Kanit';font-weight:500}
+
+  ul.checks{margin:6px 0 0 20px}
+  ul.checks li{margin:5px 0;font-size:14.5px}
+  .verdict{background:var(--surface2);border-left:4px solid var(--emberA);border-radius:8px;padding:12px 14px;font-size:15px;margin-top:8px}
+  .sources{font-size:12.5px;color:var(--ash);margin-top:14px;border-top:1px dashed var(--line);padding-top:10px}
+  .sources a{color:var(--modelB);word-break:break-all}
+
+  /* ---------- history ---------- */
+  .hist-table td{font-size:13.5px}
+  .hist-name{cursor:pointer;color:#fff;text-decoration:underline dotted}
+  .hist-del{background:none;border:none;color:var(--ash);cursor:pointer;font-size:15px}
+  .muted{color:var(--ash);font-size:13.5px}
+  .err{background:rgba(229,72,77,.12);border:1px solid rgba(229,72,77,.5);border-radius:10px;padding:12px 14px;font-size:14px;color:#ffb3b5;margin-top:12px;display:none}
+  details{margin-top:8px}
+  summary{cursor:pointer;color:var(--ash);font-size:13px}
+  pre{white-space:pre-wrap;font-size:12px;color:var(--ash);background:var(--charcoal);border-radius:8px;padding:10px;margin-top:6px;max-height:280px;overflow:auto}
+  footer{text-align:center;color:var(--ash);font-size:12px;margin-top:30px}
 </style>
 </head>
 <body>
+<div class="wrap">
 
-<header>
-  <h1>📷 สแกนบิลผู้ขาย</h1>
-  <div class="sub">ถ่ายรูปบิล → AI อ่านรายการสินค้าให้อัตโนมัติ</div>
-</header>
-
-<main>
-
-  <!-- ขั้นตอน 1: เลือกรูป -->
-  <section id="secCapture" class="card">
-    <p class="hint">ถ่ายให้เห็นทั้งใบ แสงสว่าง ไม่เอียงมาก • บิลยาวถ่ายต่อกันหลายรูปได้ (นับเป็นบิลเดียวกัน สูงสุด 6 รูป)</p>
-    <div class="pages" id="pageList"></div>
-    <div class="btn-row">
-      <label class="btn primary">
-        📷 ถ่ายรูปบิล
-        <input type="file" accept="image/*" capture="environment" hidden onchange="addPages(this)">
-      </label>
-      <label class="btn">
-        🖼️ เลือกจากอัลบั้ม
-        <input type="file" accept="image/*" multiple hidden onchange="addPages(this)">
-      </label>
+  <header>
+    <div class="brandmark"><span>จจ</span></div>
+    <div>
+      <div class="brand-eyebrow">จริงใจหมูกระทะ — BRANCH 3</div>
+      <h1>JJ Site Scanner</h1>
+      <div class="sub">พิมพ์พื้นที่ → รีเสิร์ชสด → คะแนนเทียบ DNA ลาดพร้าววังหิน / รัชดา</div>
     </div>
-    <button id="btnScan" class="btn primary" disabled onclick="scanBill()">🔍 อ่านบิล</button>
+  </header>
+
+  <!-- ============ ฟอร์มค้นหา ============ -->
+  <section class="panel">
+    <h2><span class="dot"></span>พื้นที่ที่จะสแกน</h2>
+    <div class="grid2">
+      <div>
+        <label>เขต / อำเภอ *</label>
+        <input id="inDistrict" placeholder="เช่น คันนายาว" autocomplete="off">
+      </div>
+      <div>
+        <label>แขวง / ตำบล</label>
+        <input id="inSubdistrict" placeholder="เช่น รามอินทรา" autocomplete="off">
+      </div>
+      <div>
+        <label>จังหวัด</label>
+        <input id="inProvince" value="กรุงเทพมหานคร" autocomplete="off">
+      </div>
+      <div>
+        <label>รหัสไปรษณีย์</label>
+        <input id="inZip" placeholder="เช่น 10230" inputmode="numeric" autocomplete="off">
+      </div>
+    </div>
+    <label>ถนน / จุดสังเกต (ถ้ามี — ช่วยให้สแกนแม่นขึ้นมาก)</label>
+    <input id="inLandmark" placeholder="เช่น ถนนรามอินทรา กม.8 ใกล้แฟชั่นไอส์แลนด์" autocomplete="off">
+    <label>รัศมีวิเคราะห์รอบจุดนี้</label>
+    <select id="inRadius">
+      <option value="2">2 กม.</option>
+      <option value="3" selected>3 กม. (แนะนำ — catchment หลักของร้าน)</option>
+      <option value="5">5 กม.</option>
+      <option value="8">8 กม.</option>
+      <option value="10">10 กม.</option>
+    </select>
+
+    <button class="scan-btn" id="btnScan">สแกนทำเลนี้</button>
+
+    <button class="settings-toggle" id="btnSettings">ตั้งค่า API key (สำหรับใช้งานบน GitHub Pages)</button>
+    <div class="settings" id="settingsBox">
+      <label>Anthropic API key</label>
+      <input id="inApiKey" type="password" placeholder="sk-ant-..." autocomplete="off">
+      <div class="hint">
+        • เปิดผ่านหน้า Claude.ai (artifact) — ไม่ต้องใส่ key ระบบจัดการให้<br>
+        • เปิดจากไฟล์บน GitHub Pages / เครื่องตัวเอง — ต้องใส่ key ของตัวเอง (เก็บไว้ในเครื่องนี้เท่านั้น ไม่ถูกส่งไปที่อื่นนอกจาก Anthropic)<br>
+        • แต่ละสแกนใช้เวลา ~1–2 นาที และมีค่าใช้จ่าย API ตามจำนวนการค้นเว็บ (~4–8 ครั้ง/สแกน)
+      </div>
+    </div>
+    <div class="err" id="errBox"></div>
   </section>
 
-  <!-- ขั้นตอน 2: กำลังอ่าน -->
-  <section id="secLoading" class="card" hidden>
-    <div class="loading">
-      <div class="spinner"></div>
-      <div class="t1">AI กำลังอ่านบิล…</div>
-      <div class="t2">ปกติใช้เวลา 5–15 วินาที</div>
-    </div>
+  <!-- ============ loading ============ -->
+  <section class="panel" id="loadingBox">
+    <div class="coal"></div>
+    <div id="loadingMsg">กำลังจุดเตา…</div>
+    <div id="loadingSub">รีเสิร์ชสดใช้เวลาราว 1–2 นาที อย่าเพิ่งปิดหน้า</div>
   </section>
 
-  <div id="errBox" class="errbox" hidden></div>
+  <!-- ============ ผลสแกน ============ -->
+  <section class="panel" id="resultBox"></section>
 
-  <!-- ขั้นตอน 3: ผลลัพธ์ (แก้ไขได้) -->
-  <section id="secResult" hidden>
-
-    <div class="card">
-      <label class="f">ผู้ขาย / ซัพพลายเออร์</label>
-      <input id="fSupplier" placeholder="ชื่อร้าน / บริษัท">
-      <div class="grid2 mt10">
-        <div>
-          <label class="f">เลขที่บิล</label>
-          <input id="fBillNo" placeholder="เลขที่บิล">
-        </div>
-        <div>
-          <label class="f">วันที่บิล</label>
-          <input id="fDate" type="date">
-        </div>
-      </div>
+  <!-- ============ ประวัติ + ตารางเทียบ ============ -->
+  <section class="panel" id="histPanel" style="display:none">
+    <h2><span class="dot"></span>ทำเลที่สแกนแล้ว — ตารางเทียบ</h2>
+    <div style="overflow-x:auto">
+      <table class="hist-table" id="histTable"></table>
     </div>
-
-    <div class="sec-title">
-      รายการสินค้า <span class="count" id="itemCount"></span>
-    </div>
-    <div id="itemList"></div>
-    <button class="btn ghost" onclick="addItem()">＋ เพิ่มรายการ</button>
-
-    <div class="card totals" style="margin-top:14px">
-      <div class="rowt">
-        <span class="lab">รวมจากรายการ (คำนวณ)</span>
-        <span class="val" id="tCalc">0.00</span>
-      </div>
-      <div class="rowt">
-        <span class="lab">ส่วนลด</span>
-        <input id="fDiscount" class="num" inputmode="decimal" placeholder="0" oninput="updateTotals()">
-      </div>
-      <div class="rowt">
-        <span class="lab">VAT</span>
-        <input id="fVat" class="num" inputmode="decimal" placeholder="0" oninput="updateTotals()">
-      </div>
-      <div class="rowt">
-        <span class="lab">ยอดสุทธิตามบิล</span>
-        <input id="fTotal" class="num" inputmode="decimal" placeholder="0" oninput="updateTotals()">
-      </div>
-      <div id="matchBadge"></div>
-      <div id="aiNotes" class="notes" hidden></div>
-    </div>
-
-    <div class="export-row">
-      <button class="btn btn-sm" onclick="copyJSON()">📋 คัดลอก JSON</button>
-      <button class="btn btn-sm" onclick="downloadCSV()">⬇️ ดาวน์โหลด CSV</button>
-    </div>
-    <button class="btn ghost mt10" style="margin-top:12px" onclick="resetAll()">🔄 สแกนบิลใหม่</button>
-
+    <div class="muted" style="margin-top:8px">แตะชื่อทำเลเพื่อเปิดผลเต็มอีกครั้ง • ข้อมูลเก็บในเครื่องนี้เท่านั้น</div>
+    <button class="settings-toggle" id="btnClearHist">ล้างประวัติทั้งหมด</button>
   </section>
 
-</main>
-
-<div id="toast" class="toast"></div>
+  <footer>JJ Site Scanner v1.0 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+</div>
 
 <script>
-/* ============================================================
-   ⚙️ CONFIG — แก้จุดเดียว: ใส่ URL ของ Cloudflare Worker
-   (ไฟล์ jjmk-billocr-worker.js หลัง deploy แล้ว)
-   ============================================================ */
-const WORKER_URL = 'https://jjmk-billocr.thananantpatt.workers.dev';
+'use strict';
 
-/* ---------------- state ---------------- */
-let pages = [];   // [{data(base64), mime, thumb(dataURL)}]
-let items = [];   // [{code,name,qty,unit,unit_price,amount}]
+/* ========== ค่าคงที่ของธุรกิจ ========== */
+const BRANCHES = {
+  LP: {name:'ลาดพร้าววังหิน', lat:13.816373, lng:100.591518},
+  RD: {name:'รัชดา (ห้วยขวาง)', lat:13.781467, lng:100.574181}
+};
+const DIM_W = [0.20,0.15,0.10,0.15,0.10,0.10,0.10,0.10];
+const DIM_NAMES = [
+  'D1 ความหนาแน่นประชากร (20%)','D2 ประเภทที่อยู่อาศัย (15%)','D3 กำลังซื้อ (10%)',
+  'D4 ชีวิตกลางคืนหลัง 22:00 (15%)','D5 การเดินทาง+ที่จอด (10%)','D6 ลักษณะถนน/ทำเล (10%)',
+  'D7 การแข่งขัน format ใหญ่ (10%)','D8 ความเหมาะสมสถานที่ (10%)'
+];
+const MODEL_NAME = 'claude-sonnet-4-6';
+const HIST_KEY = 'jj3scan_history_v1';
+const KEY_KEY  = 'jj3scan_apikey';
 
-/* ---------------- เลือกรูป + ย่อรูป ---------------- */
-async function addPages(input){
-  const files = Array.from(input.files || []);
-  input.value = '';
-  for (const f of files){
-    if (pages.length >= 6){ toast('สูงสุด 6 รูปต่อบิล'); break; }
-    try{
-      pages.push(await fileToPage(f));
-    }catch(e){
-      toast('อ่านรูปไม่สำเร็จ ลองใหม่อีกครั้ง');
-    }
+/* ========== storage แบบกันพัง (artifact ไม่มี localStorage ก็ยังใช้ได้) ========== */
+const mem = {};
+const store = {
+  get(k){ try{ return localStorage.getItem(k); }catch(e){ return mem[k] ?? null; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} mem[k]=v; },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} delete mem[k]; }
+};
+
+/* ========== utils ========== */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function haversine(lat1,lng1,lat2,lng2){
+  const R=6371, toR=x=>x*Math.PI/180;
+  const dLat=toR(lat2-lat1), dLng=toR(lng2-lng1);
+  const a=Math.sin(dLat/2)**2 + Math.cos(toR(lat1))*Math.cos(toR(lat2))*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function calcPct(dims, key){
+  let s=0, n=0;
+  for(let i=0;i<8;i++){
+    const d = dims && dims[i];
+    const v = d ? Number(d[key]) : NaN;
+    if(!isNaN(v)){ s += Math.max(0,Math.min(10,v)) * DIM_W[i]; n++; }
   }
-  renderPages();
+  return n ? Math.round(s*10) : 0;
+}
+function distChip(km, branch){
+  const t = branch + ' ' + km.toFixed(1) + ' กม.';
+  if(km >= 6)  return {cls:'pass', txt:t+' — ผ่าน'};
+  if(km >= 5)  return {cls:'warn', txt:t+' — เฉียดเกณฑ์'};
+  return {cls:'fail', txt:t+' — ใกล้เกินไป'};
 }
 
-async function fileToPage(file){
-  const bmp = await loadBitmap(file);
-  const w0 = bmp.width || bmp.naturalWidth, h0 = bmp.height || bmp.naturalHeight;
-  const scale = Math.min(1, 1600 / Math.max(w0, h0));
-  const w = Math.round(w0 * scale), h = Math.round(h0 * scale);
-  const c = document.createElement('canvas'); c.width = w; c.height = h;
-  c.getContext('2d').drawImage(bmp, 0, 0, w, h);
-  const dataUrl = c.toDataURL('image/jpeg', 0.85);
-  return { data: dataUrl.split(',')[1], mime: 'image/jpeg', thumb: dataUrl };
+/* ========== prompt ที่ฝัง framework ทั้งชุด ========== */
+function buildPrompt(q){
+  return `คุณคือนักวิเคราะห์ทำเลร้านอาหารในกรุงเทพฯ/ปริมณฑล ทำงานให้ร้าน "จริงใจหมูกระทะ" (บุฟเฟต์หมูกระทะ+ชาบูในโต๊ะเดียว) เพื่อประเมินพื้นที่เปิดสาขาที่ 3
+
+## บริบทธุรกิจ (ใช้เป็นเกณฑ์ทุกข้อ)
+- ราคา Standard 239 / Premium 329 บาท (สัดส่วนขายจริง 45:55) + ชุดน้ำ/ของหวาน 59 + VAT 7% → ยอดต่อหัวจริง ~370 บาท, กลุ่มเฉลี่ย 2.9 คน (ลูกค้า >50% มาเป็นคู่), บิลต่อโต๊ะ ~830–1,100 บาท
+- ร้านเปิด 11:00–02:00 (หน้าต่างดึกสำคัญมาก), ต้องการพื้นที่ 350–500 ตรม. ชั้นเดียว หรือที่ดิน 300–500 ตร.วา, ที่จอด 30+ คัน, เพดานค่าเช่ารวม 150,000–200,000 บาท/เดือน (fixed เท่านั้น)
+- เป้ายอดสาขาใหม่ 5 ล้านบาท/เดือน (~450 คน/วัน)
+- สาขาเดิม: (A) ลาดพร้าววังหิน พิกัด 13.8164,100.5915 ยอด 4 ลบ./เดือน — "โมเดล A ถนนย่านหมู่บ้าน": ถนนสายรองผ่ากลางย่านบ้านแนวราบหนาแน่น ครอบครัว/คู่ขับรถมากินในรัศมี 3–5 กม. ไม่มีรถไฟฟ้า พีค 18:00–21:30 (B) รัชดา ห้วยขวาง พิกัด 13.7815,100.5742 ยอดเดือนแรก 7.5 ลบ. — "โมเดล B เมืองคอนโด+กินดื่มดึก": คอนโดหนาแน่น+ประชากรแฝงสูง MRT วัยทำงานกินนอกบ้านถี่ มีพีคสอง 22:00–01:00
+
+## พื้นที่ที่ต้องวิเคราะห์รอบนี้
+แขวง/ตำบล: ${q.sub || '-'} | เขต/อำเภอ: ${q.dist} | จังหวัด: ${q.prov} | รหัสไปรษณีย์: ${q.zip || '-'} | จุดสังเกต/ถนน: ${q.lm || '-'} | รัศมีวิเคราะห์: ${q.r} กม.
+
+## สิ่งที่ต้องทำ
+ใช้ web_search ค้นข้อมูลล่าสุดจริง (อย่างน้อย 4 ครั้ง สูงสุด ~8 ครั้ง):
+1) ประชากรทะเบียนของเขต/อำเภอนี้ ปีล่าสุด + ลักษณะที่อยู่อาศัยหลักของย่าน (แนวราบ vs คอนโด, ประชากรแฝง)
+2) กำลังซื้อ: ราคาบ้าน/คอนโดในย่านนี้ปีล่าสุด
+3) คู่แข่งบุฟเฟต์ format ใหญ่ (40 โต๊ะ+/100 ที่นั่ง+) ในรัศมี ${q.r} กม.: สุกี้ตี๋น้อย, Lucky Suki, Best Beef, สุกี้จินดา, จักรพรรดิ์หมูกระทะ, ชาบูอินดี้, นายพรานหมูกระทะ และหมูกระทะ/ชาบูเจ้าถิ่นดัง — ระบุสาขา+ระยะโดยประมาณ
+4) ประกาศเช่าจริงที่ตรงสเปค (ยูนิตมอลล์/ที่ดิน/โชว์รูมริมถนน) ในย่านนี้ พร้อมราคา
+5) รถไฟฟ้า/โครงการอนาคตที่กระทบ demand ใน 2–3 ปี
+
+## การให้คะแนน 8 มิติ (มิติละ 0–10 สองชุด: lp = เหมือนสภาพแวดล้อมลาดพร้าววังหินแค่ไหน, rd = เหมือนรัชดาแค่ไหน)
+D1 ความหนาแน่นประชากร/catchment | D2 ประเภทที่อยู่อาศัยหลัก | D3 กำลังซื้อ | D4 ชีวิตกลางคืนหลัง 22:00 | D5 โหมดเดินทาง+ที่จอด | D6 ลักษณะถนน/ทำเล | D7 สภาพแข่งขัน format ใหญ่ (โล่งแบบ A vs แน่นแต่ demand ล้นแบบ B) | D8 ความเหมาะสมของสถานที่จริงในย่าน (เปิดตี 2 / ควัน / หาพื้นที่ 350–500 ตรม. ได้)
+
+## เกรด: A (เจรจาทันที) / B+ / B / B- / C (ไม่คุ้ม) / ตัด — ชั่งจาก ศักยภาพยอด + การแข่งขัน + โอกาสได้พื้นที่ในเพดานเช่า
+
+## รูปแบบคำตอบ — ตอบเป็น JSON ล้วนเท่านั้น ห้ามมีข้อความอื่นหรือ markdown fence:
+{"area":"ชื่อย่านสั้นๆ","lat":13.00,"lng":100.00,"summary":"สรุป 2-3 ประโยค","population":"ตัวเลข+ปี+โครงสร้าง","housing":"...","purchasing":"...","nightlife":"...","transit":"...","future":"...","competitors":[{"name":"","detail":"","km":0}],"rent":[{"desc":"","price":"","src":""}],"dims":[{"d":1,"lp":0,"rd":0,"why":"เหตุผลสั้น"},{"d":2,"lp":0,"rd":0,"why":""},{"d":3,"lp":0,"rd":0,"why":""},{"d":4,"lp":0,"rd":0,"why":""},{"d":5,"lp":0,"rd":0,"why":""},{"d":6,"lp":0,"rd":0,"why":""},{"d":7,"lp":0,"rd":0,"why":""},{"d":8,"lp":0,"rd":0,"why":""}],"sales":"ประเมิน x–y ลบ./เดือน","grade":"A|B+|B|B-|C|ตัด","verdict":"คำตัดสิน 2-4 ประโยค","checks":["สิ่งที่ต้องเช็คภาคสนาม 3-5 ข้อ"],"sources":[{"t":"ชื่อแหล่ง","u":"url"}]}
+
+กติกาเข้ม: lat/lng ต้องเป็นจุดกึ่งกลางย่านที่วิเคราะห์จริง | ทุกตัวเลขต้องมาจากการค้นจริง ถ้าหาไม่พบให้เขียน "ไม่พบข้อมูล — ต้องเช็คเอง" ห้ามกุตัวเลข | ภาษาไทยกระชับ | dims ต้องครบ 8 ข้อเรียงลำดับ`;
 }
 
-async function loadBitmap(file){
-  if ('createImageBitmap' in window){
-    try{ return await createImageBitmap(file); }catch(e){}
+/* ========== เรียก Anthropic API ========== */
+async function callClaude(prompt){
+  const key = ($('inApiKey').value || '').trim();
+  const headers = {'Content-Type':'application/json'};
+  if(key){
+    headers['x-api-key'] = key;
+    headers['anthropic-version'] = '2023-06-01';
+    headers['anthropic-dangerous-direct-browser-access'] = 'true';
+    store.set(KEY_KEY, key);
   }
-  const url = URL.createObjectURL(file);
-  const img = new Image();
-  img.src = url;
-  await img.decode();
-  URL.revokeObjectURL(url);
-  return img;
-}
-
-function renderPages(){
-  const el = document.getElementById('pageList');
-  el.innerHTML = pages.map((p,i)=>`
-    <div class="page">
-      <img src="${p.thumb}" alt="หน้า ${i+1}">
-      <span class="num">${i+1}</span>
-      <button class="rm" onclick="removePage(${i})" aria-label="ลบรูป">✕</button>
-    </div>`).join('');
-  document.getElementById('btnScan').disabled = pages.length === 0;
-}
-function removePage(i){ pages.splice(i,1); renderPages(); }
-
-/* ---------------- เรียก Worker ---------------- */
-async function scanBill(){
-  show('secCapture', false); show('secLoading', true); show('secResult', false);
-  showErr('');
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=>ctrl.abort(), 240000);
   try{
-    const r = await fetch(WORKER_URL, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ images: pages.map(p=>({data:p.data, mime:p.mime})) })
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST', headers, signal:ctrl.signal,
+      body: JSON.stringify({
+        model: MODEL_NAME,
+        max_tokens: 4000,
+        messages: [{role:'user', content: prompt}],
+        tools: [{type:'web_search_20250305', name:'web_search', max_uses:8}]
+      })
     });
-    const data = await r.json().catch(()=>({}));
-    if (!r.ok || !data.ok){
-      throw new Error(data.detail || data.error || ('HTTP '+r.status));
+    if(!res.ok){
+      let msg = 'HTTP ' + res.status;
+      try{ const j = await res.json(); msg += ' — ' + (j.error && j.error.message || ''); }catch(e){}
+      if(res.status === 401) msg += ' | ถ้ารันบน GitHub Pages/เครื่องตัวเอง ต้องใส่ API key ในตั้งค่าก่อน';
+      if(res.status === 429) msg += ' | ยิงถี่เกิน rate limit — รอสักครู่แล้วลองใหม่';
+      if(res.status >= 500) msg += ' | ฝั่ง Anthropic หนาแน่น — ลองใหม่อีกครั้ง';
+      throw new Error(msg);
     }
-    fillResult(data.result || {});
-    show('secLoading', false); show('secResult', true);
-    window.scrollTo({top:0});
-  }catch(e){
-    show('secLoading', false); show('secCapture', true);
-    showErr('อ่านบิลไม่สำเร็จ: ' + e.message + ' — ลองถ่ายใหม่ให้ชัดขึ้น หรือกดอ่านอีกครั้ง');
+    const data = await res.json();
+    return (data.content || []).map(b => b.type === 'text' ? b.text : '').filter(Boolean).join('\n');
+  } finally { clearTimeout(timer); }
+}
+function parseJSON(text){
+  let t = String(text||'').replace(/```json|```/g,'').trim();
+  const s = t.indexOf('{'), e = t.lastIndexOf('}');
+  if(s === -1 || e === -1) throw new Error('ไม่พบ JSON ในคำตอบ');
+  return JSON.parse(t.slice(s, e+1));
+}
+
+/* ========== loading ========== */
+const LOAD_MSGS = [
+  'กำลังจุดเตา — ตั้งต้นการค้นหา…','กำลังค้นข้อมูลประชากรและที่อยู่อาศัย…',
+  'กำลังสแกนคู่แข่งบุฟเฟต์ในรัศมี…','กำลังเช็คราคาบ้าน/คอนโดของย่าน…',
+  'กำลังหาประกาศเช่าที่ตรงสเปค…','กำลังให้คะแนน 8 มิติ เทียบสองสาขาต้นแบบ…','เกือบเสร็จ — เรียบเรียงรายงาน…'
+];
+let loadTimer = null;
+function setLoading(on){
+  $('loadingBox').style.display = on ? 'block' : 'none';
+  $('btnScan').disabled = on;
+  $('btnScan').classList.toggle('loading', on);
+  $('btnScan').textContent = on ? 'กำลังสแกน…' : 'สแกนทำเลนี้';
+  clearInterval(loadTimer);
+  if(on){
+    let i = 0; $('loadingMsg').textContent = LOAD_MSGS[0];
+    loadTimer = setInterval(()=>{ i = Math.min(i+1, LOAD_MSGS.length-1); $('loadingMsg').textContent = LOAD_MSGS[i]; }, 12000);
   }
 }
 
-/* ---------------- แสดงผล + แก้ไข ---------------- */
-function fillResult(res){
-  document.getElementById('fSupplier').value = res.supplier_name || '';
-  document.getElementById('fBillNo').value   = res.bill_no || '';
-  document.getElementById('fDate').value     = res.bill_date || '';
-  document.getElementById('fDiscount').value = numOrEmpty(res.discount);
-  document.getElementById('fVat').value      = numOrEmpty(res.vat);
-  document.getElementById('fTotal').value    = numOrEmpty(res.total);
+/* ========== render ผล ========== */
+function render(r){
+  const lpPct = calcPct(r.dims,'lp'), rdPct = calcPct(r.dims,'rd');
+  const hasGeo = isFinite(r.lat) && isFinite(r.lng);
+  const dLP = hasGeo ? haversine(r.lat,r.lng,BRANCHES.LP.lat,BRANCHES.LP.lng) : null;
+  const dRD = hasGeo ? haversine(r.lat,r.lng,BRANCHES.RD.lat,BRANCHES.RD.lng) : null;
+  const minD = hasGeo ? Math.min(dLP,dRD) : null;
+  const grade = (minD !== null && minD < 5) ? 'ตัด' : (r.grade || '-');
+  r._calc = {lpPct, rdPct, dLP, dRD, grade};
 
-  items = (res.items || []).map(it => ({
-    code: it.code || '',
-    name: it.name || '',
-    qty: toNum(it.qty),
-    unit: it.unit || '',
-    unit_price: toNum(it.unit_price),
-    amount: toNum(it.amount)
-  }));
-  // ถ้า amount ว่างแต่มี qty*price ให้คำนวณให้
-  items.forEach(it=>{
-    if (it.amount == null && it.qty != null && it.unit_price != null){
-      it.amount = round2(it.qty * it.unit_price);
-    }
-  });
-
-  const notes = document.getElementById('aiNotes');
-  if (res.notes){ notes.textContent = '⚠️ AI แจ้งว่า: ' + res.notes; notes.hidden = false; }
-  else notes.hidden = true;
-
-  renderItems();
-}
-
-function renderItems(){
-  const el = document.getElementById('itemList');
-  el.innerHTML = items.map((it,i)=>`
-    <div class="item">
-      <div class="row1">
-        <span class="no">${i+1}</span>
-        <input class="name" placeholder="ชื่อสินค้า" value="${esc(it.name)}"
-               oninput="items[${i}].name=this.value">
-        <button class="del" onclick="delItem(${i})" aria-label="ลบรายการ">🗑</button>
-      </div>
-      <div class="row2">
-        <div class="cell"><label>จำนวน</label>
-          <input class="num" inputmode="decimal" value="${numOrEmpty(it.qty)}"
-                 oninput="onQtyPrice(${i},'qty',this.value)"></div>
-        <div class="cell"><label>หน่วย</label>
-          <input value="${esc(it.unit)}" oninput="items[${i}].unit=this.value"></div>
-        <div class="cell"><label>ราคา/หน่วย</label>
-          <input class="num" inputmode="decimal" value="${numOrEmpty(it.unit_price)}"
-                 oninput="onQtyPrice(${i},'unit_price',this.value)"></div>
-        <div class="cell"><label>จำนวนเงิน</label>
-          <input class="num" inputmode="decimal" id="amt${i}" value="${numOrEmpty(it.amount)}"
-                 oninput="items[${i}].amount=toNum(this.value); updateTotals()"></div>
-      </div>
-    </div>`).join('');
-  document.getElementById('itemCount').textContent = items.length + ' รายการ';
-  updateTotals();
-}
-
-function onQtyPrice(i, key, val){
-  items[i][key] = toNum(val);
-  const it = items[i];
-  if (it.qty != null && it.unit_price != null){
-    it.amount = round2(it.qty * it.unit_price);
-    const amtEl = document.getElementById('amt'+i);
-    if (amtEl) amtEl.value = it.amount;
+  let banner = '';
+  if(minD !== null){
+    if(minD < 5) banner = '<div class="banner fail">ทับรัศมีสาขาเดิม (ห่างเพียง '+minD.toFixed(1)+' กม.) — เปิดที่นี่ = แย่งลูกค้าตัวเอง ระบบปรับเกรดเป็น "ตัด" อัตโนมัติ</div>';
+    else if(minD < 6) banner = '<div class="banner warn">เฉียดเกณฑ์ระยะ 6 กม. — เผื่อ cannibalization 5–10% ของยอดสาขาเดิมในการคำนวณเสมอ</div>';
+    else banner = '<div class="banner pass">ผ่านเกณฑ์ระยะห่างจากทั้งสองสาขา (ขั้นต่ำ 6 กม.)</div>';
   }
-  updateTotals();
+
+  const model = lpPct >= rdPct ? 'เอียงโมเดล A — ถนนย่านหมู่บ้าน (แบบลาดพร้าววังหิน)' : 'เอียงโมเดล B — เมืองคอนโด+กินดื่มดึก (แบบรัชดา)';
+  const gmap = hasGeo ? ' • <a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query='+r.lat+','+r.lng+'">เปิดแผนที่</a>' : '';
+
+  const dimRows = (r.dims||[]).map((d,i)=>(
+    '<tr><td>'+esc(DIM_NAMES[i]||('D'+(i+1)))+'<div class="why">'+esc(d.why||'')+'</div></td>'+
+    '<td class="sc a">'+esc(d.lp)+'</td><td class="sc b">'+esc(d.rd)+'</td></tr>'
+  )).join('');
+
+  const comps = (r.competitors&&r.competitors.length) ? r.competitors.map(c=>(
+    '<div class="comp-item"><span class="km">'+(isFinite(c.km)? '~'+Number(c.km).toFixed(1)+' กม.':'')+'</span><b>'+esc(c.name)+'</b><div class="d">'+esc(c.detail||'')+'</div></div>'
+  )).join('') : '<div class="muted">ไม่พบคู่แข่ง format ใหญ่ในรัศมี — ต้องยืนยันภาคสนาม</div>';
+
+  const rents = (r.rent&&r.rent.length) ? r.rent.map(x=>(
+    '<div class="rent-item"><span class="price">'+esc(x.price||'สอบถามราคา')+'</span> — '+esc(x.desc||'')+'<div class="d">ที่มา: '+esc(x.src||'-')+'</div></div>'
+  )).join('') : '<div class="muted">ไม่พบประกาศตรงสเปคจากการค้นรอบนี้ — ให้นายหน้าล่าด้วยใบสเปคจากรายงาน PDF</div>';
+
+  const checks = (r.checks||[]).map(c=>'<li>'+esc(c)+'</li>').join('');
+  const sources = (r.sources||[]).map(s=>'<div>• '+esc(s.t||'')+' — <a target="_blank" rel="noopener" href="'+esc(s.u||'#')+'">'+esc(s.u||'')+'</a></div>').join('');
+
+  $('resultBox').innerHTML =
+    '<div class="area-title">'+esc(r.area||'-')+'</div>'+
+    '<div class="area-meta">'+esc(r.summary||'')+gmap+'</div>'+banner+
+    '<div class="dna"><div class="dna-row">'+
+      '<div class="dna-half left"><div class="dna-fill" style="width:'+lpPct+'%"></div></div>'+
+      '<div class="grade-seal"><div class="g">'+esc(grade)+'</div><div class="t">เกรด</div></div>'+
+      '<div class="dna-half right"><div class="dna-fill" style="width:'+rdPct+'%"></div></div>'+
+    '</div><div class="dna-labels">'+
+      '<div class="lp"><span class="num">'+lpPct+'%</span><small>คล้ายลาดพร้าววังหิน (โมเดล A)</small></div>'+
+      '<div class="rd"><span class="num">'+rdPct+'%</span><small>คล้ายรัชดา (โมเดล B)</small></div>'+
+    '</div></div>'+
+    '<div class="chips">'+
+      (dLP!==null ? '<span class="chip '+distChip(dLP,'').cls+'">ห่างลาดพร้าววังหิน <b>'+dLP.toFixed(1)+'</b> กม.</span>':'')+
+      (dRD!==null ? '<span class="chip '+distChip(dRD,'').cls+'">ห่างรัชดา <b>'+dRD.toFixed(1)+'</b> กม.</span>':'')+
+      '<span class="chip">'+esc(model)+'</span>'+
+      '<span class="chip">ศักยภาพยอด: <b>'+esc(r.sales||'-')+'</b></span>'+
+    '</div>'+
+    '<div class="sec-label">คะแนน 8 มิติ</div>'+
+    '<table><tr><th>มิติ</th><th style="text-align:center">A</th><th style="text-align:center">B</th></tr>'+dimRows+'</table>'+
+    '<div class="sec-label">ข้อมูลย่าน</div><div class="kv">'+
+      '<p><b>ประชากร:</b> '+esc(r.population||'-')+'</p>'+
+      '<p><b>ที่อยู่อาศัย:</b> '+esc(r.housing||'-')+'</p>'+
+      '<p><b>กำลังซื้อ:</b> '+esc(r.purchasing||'-')+'</p>'+
+      '<p><b>ชีวิตกลางคืน:</b> '+esc(r.nightlife||'-')+'</p>'+
+      '<p><b>การเดินทาง:</b> '+esc(r.transit||'-')+'</p>'+
+      '<p><b>อนาคต 2–3 ปี:</b> '+esc(r.future||'-')+'</p>'+
+    '</div>'+
+    '<div class="sec-label">คู่แข่ง format ใหญ่ในรัศมี</div>'+comps+
+    '<div class="sec-label">ประกาศเช่าที่เจอ</div>'+rents+
+    '<div class="sec-label">คำตัดสิน</div><div class="verdict">'+esc(r.verdict||'-')+'</div>'+
+    '<div class="sec-label">เช็คภาคสนามก่อนตัดสินใจ</div><ul class="checks">'+checks+'</ul>'+
+    (sources ? '<div class="sources"><b>แหล่งข้อมูล:</b>'+sources+'</div>' : '');
+  $('resultBox').style.display = 'block';
+  $('resultBox').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
-function addItem(){
-  items.push({code:'', name:'', qty:null, unit:'', unit_price:null, amount:null});
-  renderItems();
-  const list = document.getElementById('itemList');
-  list.lastElementChild?.querySelector('.name')?.focus();
+/* ========== history ========== */
+function loadHist(){ try{ return JSON.parse(store.get(HIST_KEY) || '[]'); }catch(e){ return []; } }
+function saveHist(h){ store.set(HIST_KEY, JSON.stringify(h.slice(0,20))); }
+function renderHist(){
+  const h = loadHist();
+  $('histPanel').style.display = h.length ? 'block' : 'none';
+  if(!h.length) return;
+  $('histTable').innerHTML =
+    '<tr><th>ทำเล</th><th>A%</th><th>B%</th><th>เกรด</th><th>ห่าง LP/RD</th><th></th></tr>' +
+    h.map((x,i)=>{
+      const c = x._calc || {};
+      return '<tr><td><span class="hist-name" data-i="'+i+'">'+esc(x.area||'-')+'</span></td>'+
+        '<td class="sc a">'+ (c.lpPct??'-') +'</td><td class="sc b">'+ (c.rdPct??'-') +'</td>'+
+        '<td>'+esc(c.grade||x.grade||'-')+'</td>'+
+        '<td>'+ (c.dLP!=null? c.dLP.toFixed(1):'-') +' / '+ (c.dRD!=null? c.dRD.toFixed(1):'-') +'</td>'+
+        '<td><button class="hist-del" data-del="'+i+'" title="ลบ">✕</button></td></tr>';
+    }).join('');
 }
-function delItem(i){ items.splice(i,1); renderItems(); }
+$('histTable').addEventListener('click', e=>{
+  const open = e.target.getAttribute('data-i');
+  const del  = e.target.getAttribute('data-del');
+  const h = loadHist();
+  if(open !== null && h[open]){ render(h[open]); }
+  if(del !== null){ h.splice(Number(del),1); saveHist(h); renderHist(); }
+});
+$('btnClearHist').addEventListener('click', ()=>{ if(confirm('ล้างประวัติการสแกนทั้งหมด?')){ store.del(HIST_KEY); renderHist(); } });
 
-function updateTotals(){
-  const sum = round2(items.reduce((s,it)=> s + (it.amount||0), 0));
-  document.getElementById('tCalc').textContent = fmt(sum);
-
-  const discount = toNum(document.getElementById('fDiscount').value) || 0;
-  const vat      = toNum(document.getElementById('fVat').value) || 0;
-  const total    = toNum(document.getElementById('fTotal').value);
-
-  const badge = document.getElementById('matchBadge');
-  if (total == null){ badge.innerHTML = ''; return; }
-  const expect = round2(sum - discount + vat);
-  const diff = round2(expect - total);
-  if (Math.abs(diff) <= 0.5){
-    badge.innerHTML = '<span class="badge ok">✓ ยอดตรงกับบิล</span>';
-  } else {
-    badge.innerHTML = '<span class="badge warn">⚠ ยอดต่างกัน ' + fmt(Math.abs(diff)) +
-      ' บาท — ตรวจจำนวน/ราคาอีกครั้ง</span>';
-  }
-}
-
-/* ---------------- export ---------------- */
-function buildData(){
-  return {
-    supplier_name: document.getElementById('fSupplier').value || null,
-    bill_no: document.getElementById('fBillNo').value || null,
-    bill_date: document.getElementById('fDate').value || null,
-    items: items.map(it=>({
-      code: it.code || null, name: it.name || null, qty: it.qty,
-      unit: it.unit || null, unit_price: it.unit_price, amount: it.amount
-    })),
-    discount: toNum(document.getElementById('fDiscount').value),
-    vat: toNum(document.getElementById('fVat').value),
-    total: toNum(document.getElementById('fTotal').value)
+/* ========== main ========== */
+$('btnSettings').addEventListener('click', ()=> $('settingsBox').classList.toggle('open'));
+$('btnScan').addEventListener('click', async ()=>{
+  const q = {
+    dist: $('inDistrict').value.trim(), sub: $('inSubdistrict').value.trim(),
+    prov: $('inProvince').value.trim() || 'กรุงเทพมหานคร',
+    zip: $('inZip').value.trim(), lm: $('inLandmark').value.trim(), r: $('inRadius').value
   };
-}
-
-async function copyJSON(){
-  const text = JSON.stringify(buildData(), null, 2);
+  $('errBox').style.display = 'none';
+  if(!q.dist && !q.lm){ $('errBox').textContent = 'อย่างน้อยต้องใส่ "เขต/อำเภอ" หรือ "ถนน/จุดสังเกต" หนึ่งอย่าง'; $('errBox').style.display='block'; return; }
+  $('resultBox').style.display = 'none';
+  setLoading(true);
+  let raw = '';
   try{
-    await navigator.clipboard.writeText(text);
-    toast('คัดลอก JSON แล้ว');
-  }catch(e){
-    const ta = document.createElement('textarea');
-    ta.value = text; document.body.appendChild(ta); ta.select();
-    document.execCommand('copy'); ta.remove();
-    toast('คัดลอก JSON แล้ว');
+    raw = await callClaude(buildPrompt(q));
+    const r = parseJSON(raw);
+    r._q = q; r._ts = Date.now();
+    render(r);
+    const h = loadHist(); h.unshift(r); saveHist(h); renderHist();
+  }catch(err){
+    const detail = raw ? '<details><summary>ดูคำตอบดิบ (สำหรับดีบัก)</summary><pre>'+esc(raw)+'</pre></details>' : '';
+    $('errBox').innerHTML = 'สแกนไม่สำเร็จ: '+esc(err.message||err)+' — ลองกดสแกนอีกครั้ง'+detail;
+    $('errBox').style.display = 'block';
+  }finally{
+    setLoading(false);
   }
-}
+});
 
-function downloadCSV(){
-  const d = buildData();
-  const rows = [
-    ['ผู้ขาย', d.supplier_name || ''],
-    ['เลขที่บิล', d.bill_no || ''],
-    ['วันที่', d.bill_date || ''],
-    [],
-    ['ลำดับ','รหัส','ชื่อสินค้า','จำนวน','หน่วย','ราคาต่อหน่วย','จำนวนเงิน'],
-    ...d.items.map((it,i)=>[i+1, it.code||'', it.name||'', it.qty??'', it.unit||'', it.unit_price??'', it.amount??'']),
-    [],
-    ['ส่วนลด','', '', '', '', '', d.discount??''],
-    ['VAT','', '', '', '', '', d.vat??''],
-    ['ยอดสุทธิ','', '', '', '', '', d.total??'']
-  ];
-  const csv = '\uFEFF' + rows.map(r=>r.map(c=>{
-    const s = String(c ?? '');
-    return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
-  }).join(',')).join('\n');
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  const name = (d.bill_no || 'bill') + '_' + (d.bill_date || todayStr());
-  a.download = 'บิล_' + name.replace(/[\\/:*?"<>|]/g,'-') + '.csv';
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-function resetAll(){
-  pages = []; items = [];
-  renderPages();
-  show('secResult', false); show('secCapture', true); showErr('');
-  window.scrollTo({top:0});
-}
-
-/* ---------------- utils ---------------- */
-function show(id, on){ document.getElementById(id).hidden = !on; }
-function showErr(msg){
-  const el = document.getElementById('errBox');
-  el.textContent = msg; el.hidden = !msg;
-}
-function toNum(v){
-  if (v === null || v === undefined || v === '') return null;
-  const n = parseFloat(String(v).replace(/,/g,''));
-  return isNaN(n) ? null : n;
-}
-function numOrEmpty(v){ return (v === null || v === undefined) ? '' : v; }
-function round2(n){ return Math.round(n * 100) / 100; }
-function fmt(n){ return (n??0).toLocaleString('th-TH',{minimumFractionDigits:2, maximumFractionDigits:2}); }
-function esc(s){ return String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
-function todayStr(){ return new Date().toISOString().slice(0,10); }
-let toastTimer;
-function toast(msg){
-  const el = document.getElementById('toast');
-  el.textContent = msg; el.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(()=>el.classList.remove('show'), 2200);
-}
+/* ========== init ========== */
+(function init(){
+  const k = store.get(KEY_KEY); if(k) $('inApiKey').value = k;
+  renderHist();
+})();
 </script>
 </body>
 </html>
