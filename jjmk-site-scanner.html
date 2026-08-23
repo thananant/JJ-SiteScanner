@@ -423,7 +423,7 @@
     </section>
   </div>
 
-  <footer>JJ Site Scanner v3.4 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v3.5 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -1083,7 +1083,8 @@ async function cloudPushQ(items){
   const base = it => ({key:qKeyOf(it), name:it.name, lat:it.lat, lng:it.lng, zone:it.zone||'', type:it.type||'',
     queue_evidence:it.queue_evidence||'', rating:String(it.rating||''), reviews:(Number(it.reviews)||null), url:it.url||'', src:it.src||''});
   const full = it => Object.assign(base(it), {pid:it.pid||'', rv:(it.rv&&it.rv.length? it.rv : null),
-    hist:(it.hist&&it.hist.length? it.hist : null), deep:(it.deep||null)});
+    hist:(it.hist&&it.hist.length? it.hist : null), deep:(it.deep||null),
+    deep_log:(it.deepLog&&it.deepLog.length? it.deepLog : null), rv_log:(it.rvLog&&it.rvLog.length? it.rvLog : null)});
   const post = rows => sbFetch('jj3_queue_spots?on_conflict=key',
     {method:'POST', headers:{'Prefer':'resolution=merge-duplicates,return=minimal'}, body: JSON.stringify(rows)});
   try{
@@ -1101,7 +1102,8 @@ async function cloudPullQ(){
   const rows = await sbFetch('jj3_queue_spots?select=*&limit=3000', {method:'GET'});
   return (rows||[]).map(x=>({name:x.name, lat:Number(x.lat), lng:Number(x.lng), zone:x.zone||'', type:x.type||'',
     queue_evidence:x.queue_evidence||'', rating:x.rating||'', reviews:x.reviews||'', url:x.url||'', src:x.src||'',
-    pid:x.pid||'', rv:(x.rv||null), hist:(x.hist||null), deep:(x.deep||null)}));
+    pid:x.pid||'', rv:(x.rv||null), hist:(x.hist||null), deep:(x.deep||null),
+    deepLog:(x.deep_log||null), rvLog:(x.rv_log||null)}));
 }
 function mergeHist(a, b){
   const m = {};
@@ -1144,7 +1146,9 @@ async function syncFromCloud(showErr){
       if(!(m.rv && m.rv.length) && l.rv && l.rv.length) m.rv = l.rv;
       if(!m.deep && l.deep) m.deep = l.deep;
       m.hist = mergeHist(l.hist, c.hist);
-      if(m.reviews !== c.reviews || m.rv !== c.rv || m.deep !== c.deep || (m.hist||[]).length !== (c.hist||[]).length) pushBack.push(m);
+      if((l.deepLog||[]).length > (m.deepLog||[]).length) m.deepLog = l.deepLog;
+      if((l.rvLog||[]).length > (m.rvLog||[]).length) m.rvLog = l.rvLog;
+      if(m.reviews !== c.reviews || m.rv !== c.rv || m.deep !== c.deep || m.deepLog !== c.deepLog || m.rvLog !== c.rvLog || (m.hist||[]).length !== (c.hist||[]).length) pushBack.push(m);
       return m;
     });
     d.items = mergedQ.concat(localOnly); saveQData(d);
@@ -1492,6 +1496,12 @@ function rvHtml(it){
   }else{
     head += '<div class="d">เริ่มบันทึกยอดรีวิวของร้านนี้แล้ว — สแกนโซนซ้ำ/กดอ่านรีวิวอีกครั้งในสัปดาห์หน้า ระบบจะคำนวณ "อัตรารีวิวเพิ่ม/สัปดาห์" ให้อัตโนมัติ (ตัววัดว่าร้านกำลังมาแรงหรือแผ่ว)</div>';
   }
+  if(it.rv && it.rv.length){
+    const past = (it.rvLog||[]);
+    head += '<div class="d">ชุดข้อความรีวิวปัจจุบัน: ครั้งที่ '+(past.length+1)
+      + (past.length ? (' • ชุดก่อนหน้า: '+past.slice().reverse().map((h,i)=>'ครั้งที่ '+(past.length-i)+' '+fmtDate(h.t)+' ('+(h.rating||'-')+'★/'+(h.reviews? Number(h.reviews).toLocaleString():'-')+' รีวิว)').join(' · ')) : '')
+      + ' <button class="qmini" data-rerv="'+esc(qKeyOf(it))+'">ดึงรีวิวชุดใหม่</button></div>';
+  }
   head += '<div class="d">อ่านรีวิวครบทุกรายการที่ปุ่ม "เปิดใน Google Maps"</div>';
   let deep = '';
   if(it.deep){
@@ -1503,24 +1513,40 @@ function rvHtml(it){
       const o = rvOldest(it);
       opened = o ? ('อย่างน้อยตั้งแต่ ~'+fmtMonthYear(o)+' (อิงรีวิวเก่าสุดที่ API ให้)') : (opened || '-');
     }
-    deep = '<div class="qrv-item"><b>บทวิเคราะห์ร้าน (AI อ่านรีวิว+ค้นเว็บ):</b><br>เปิดเมื่อ: '+esc(opened)+' · กระแส: '+esc(it.deep.trend||'-')+
+    const dNo = ((it.deepLog||[]).length) + 1;
+    const dWhen = it.deep._t ? (' • '+fmtDate(it.deep._t)) : '';
+    deep = '<div class="qrv-item"><b>บทวิเคราะห์ร้าน (AI อ่านรีวิว+ค้นเว็บ) — ครั้งที่ '+dNo+dWhen+'</b> '+
+      '<button class="qmini" data-redeep="'+esc(qKeyOf(it))+'">สืบใหม่ (เก็บครั้งนี้เป็นประวัติ)</button><br>เปิดเมื่อ: '+esc(opened)+' · กระแส: '+esc(it.deep.trend||'-')+
       (it.deep.why ? ('<br>เหตุที่คิวยาว: '+esc(it.deep.why)) : '')+
       li(it.deep.pros, '#8fd3a5', 'ด้านดีที่ลูกค้าชม')+
       li(it.deep.cons, '#ff9b9e', 'ด้านไม่ดีที่ลูกค้าติ')+
       li(it.deep.pain, '#e8c07a', 'Pain point ของลูกค้า')+
       '</div>';
+    if(it.deepLog && it.deepLog.length){
+      deep += '<div class="qrv-item"><b>ประวัติการสืบครั้งก่อน:</b>'+
+        it.deepLog.slice().reverse().map((h,i)=>{
+          const no = it.deepLog.length - i;
+          const dp = h.deep || {};
+          return '<div class="d">ครั้งที่ '+no+' • '+fmtDate(h.t)+' — เปิด: '+esc(dp.opened||'-')+' | กระแส: '+esc(dp.trend||'-')+
+            ' | ดี '+((dp.pros||[]).length)+' ข้อ / ติ '+((dp.cons||[]).length)+' / pain '+((dp.pain||[]).length)+'</div>';
+        }).join('')+'</div>';
+    }
   }
   const body = (it.rv||[]).map(r=>(
     '<div class="qrv-item"><b>'+esc(r.r)+'★</b> · '+esc(r.t||'')+'<br>'+esc(r.x||'')+'<div class="d">— '+esc(r.a||'ผู้ใช้ Google')+'</div></div>'
   )).join('');
   return head + deep + (body || '<div class="d">ร้านนี้ไม่มีข้อความรีวิวส่งมาจาก API — กด "สืบประวัติ (AI)" หรือเปิดใน Google Maps</div>');
 }
-async function deepDive(k, panel){
+async function deepDive(k, panel, force){
   panel.style.display = 'block';
   const d = loadQData();
   const it = d.items.find(x=>qKeyOf(x)===k);
   if(!it){ panel.innerHTML = '<div class="d">ไม่พบข้อมูลร้าน</div>'; return; }
-  if(it.deep && it.deep.pros){ panel.innerHTML = rvHtml(it); return; }
+  if(it.deep && it.deep.pros && !force){ panel.innerHTML = rvHtml(it); return; }
+  if(force && it.deep){
+    it.deepLog = (it.deepLog||[]).concat([{t: (it.deep._t || Date.now()), deep: it.deep}]).slice(-10);
+    it.deep = null;
+  }
   const before = panel.innerHTML;
   panel.innerHTML = '<div class="d">กำลังสืบประวัติร้านจากเว็บ (~30–60 วินาที)…</div>';
   try{
@@ -1529,7 +1555,38 @@ async function deepDive(k, panel){
     cloudPushQ([it]).catch(()=>{});
     panel.innerHTML = rvHtml(it);
   }catch(err){
-    panel.innerHTML = before + '<div class="d">สืบประวัติไม่สำเร็จ: '+esc(err.message||err)+'</div>';
+    if(force && !it.deep && it.deepLog && it.deepLog.length){
+      const last = it.deepLog.pop();
+      it.deep = last.deep;
+      saveQData(d);
+    }
+    panel.innerHTML = before + '<div class="d">สืบประวัติไม่สำเร็จ: '+esc(err.message||err)+' (ยังเก็บผลครั้งก่อนไว้ให้)</div>';
+  }
+}
+async function refetchReviews(k, panel){
+  panel.style.display = 'block';
+  const d = loadQData();
+  const it = d.items.find(x=>qKeyOf(x)===k);
+  if(!it) return;
+  const gk = (($('inGKey').value||'').trim()) || ((store.get(GKEY_KEY)||'').trim());
+  if(!gk){ panel.innerHTML = '<div class="d">ดึงรีวิวชุดใหม่ต้องมี Google Maps API key</div>'; return; }
+  if(it.rv && it.rv.length){
+    it.rvLog = (it.rvLog||[]).concat([{t: Date.now(), rating: it.rating, reviews: it.reviews, rv: it.rv}]).slice(-5);
+    it.rv = null;
+  }
+  panel.innerHTML = '<div class="d">กำลังดึงรีวิวชุดใหม่…</div>';
+  try{
+    await fetchReviewsFor(it, gk);
+    saveQData(d);
+    cloudPushQ([it]).catch(()=>{});
+    panel.innerHTML = rvHtml(it);
+  }catch(err){
+    if(!(it.rv && it.rv.length) && it.rvLog && it.rvLog.length){
+      const last = it.rvLog.pop();
+      it.rv = last.rv; it.rating = last.rating || it.rating; it.reviews = last.reviews || it.reviews;
+      saveQData(d);
+    }
+    panel.innerHTML = '<div class="d">ดึงรีวิวไม่สำเร็จ: '+esc(err.message||err)+' (ยังเก็บชุดก่อนไว้ให้)</div>';
   }
 }
 async function deepFetch(it){
@@ -1543,6 +1600,7 @@ async function deepFetch(it){
     const s = t.indexOf('{'), e = t.lastIndexOf('}');
     if(s===-1 || e===-1) throw new Error('ไม่ได้คำตอบที่ใช้ได้ — ลองกดใหม่');
     it.deep = JSON.parse(t.slice(s, e+1));
+    it.deep._t = Date.now();
     return it.deep;
 }
 async function gplaceDetails(pid, gk){
@@ -1930,6 +1988,7 @@ async function runQFetch(btn, fn){
   }finally{ btn.disabled = false; btn.textContent = t0; }
 }
 function switchTab(which){
+  store.set('jj3_tab', which);
   const scan = which==='scan';
   $('pageScan').style.display = scan ? 'block' : 'none';
   $('pageQueue').style.display = scan ? 'none' : 'block';
@@ -1963,6 +2022,15 @@ $('btnQGoogle').addEventListener('click', ()=> runQFetch($('btnQGoogle'), qFetch
 $('qBuffetOnly').addEventListener('change', redrawQMarkers);
 $('qHeatOn').addEventListener('change', redrawQMarkers);
 $('btnQDeepAll').addEventListener('click', qDeepAll);
+document.addEventListener('click', e=>{
+  const rd = e.target.closest('[data-redeep]');
+  const rr = e.target.closest('[data-rerv]');
+  if(!rd && !rr) return;
+  const k = (rd || rr).getAttribute(rd ? 'data-redeep' : 'data-rerv');
+  const panel = $('qList').querySelector('[data-rvpanel="'+k.replace(/"/g,'\\"')+'"]');
+  if(!panel) return;
+  if(rd) deepDive(k, panel, true); else refetchReviews(k, panel);
+});
 $('btnQAnalyze').addEventListener('click', async ()=>{
   const items = qApplyFilter(loadQData().items);
   if(!items.length){ alert('ไม่มีร้านตรงตัวกรอง — ปรับตัวกรองหรือรวบรวมข้อมูลก่อน (การวิเคราะห์ใช้เฉพาะร้านที่ผ่านตัวกรองปัจจุบัน)'); return; }
@@ -2013,6 +2081,22 @@ $('btnSbSync').addEventListener('click', ()=>{
   syncFromCloud(true);
 });
 
+/* ========== ดึงลงเพื่อรีเฟรช (มือถือ) ========== */
+(function(){
+  let sy = 0, pulling = false;
+  document.addEventListener('touchstart', e=>{
+    if(window.scrollY <= 0 && !e.target.closest('#qmap')){ sy = e.touches[0].clientY; pulling = true; }
+    else pulling = false;
+  }, {passive:true});
+  document.addEventListener('touchmove', ()=>{ if(pulling && window.scrollY > 0) pulling = false; }, {passive:true});
+  document.addEventListener('touchend', e=>{
+    if(!pulling) return;
+    const dy = e.changedTouches[0].clientY - sy;
+    pulling = false;
+    if(window.scrollY <= 0 && dy > 110) location.reload();
+  });
+})();
+
 /* ========== init ========== */
 (function init(){
   const k = store.get(KEY_KEY); if(k) $('inApiKey').value = k;
@@ -2025,6 +2109,7 @@ $('btnSbSync').addEventListener('click', ()=>{
   bindViewChips();
   bindTierChips();
   try{ const own = JSON.parse(store.get(OWN_KEY)||'null'); if(own && own.lp) renderOwn(own); }catch(e){}
+  if(store.get('jj3_tab') === 'queue') switchTab('queue');
   $('qMaxRating').addEventListener('change', ()=>{ qFilter.maxR = Number($('qMaxRating').value)||0; redrawQMarkers(); });
   let qSearchT = null;
   $('qListSearch').addEventListener('input', ()=>{
