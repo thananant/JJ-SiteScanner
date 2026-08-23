@@ -99,6 +99,17 @@
   .occ td{font-size:13.5px}
   .occ .sal{color:#8fd3a5;font-family:'Kanit';white-space:nowrap}
 
+  /* ---------- ตารางเทียบสาขาต้นแบบ ---------- */
+  .cmp-wrap{overflow-x:auto;margin:8px 0;border:1px solid var(--line);border-radius:10px}
+  .cmp{min-width:680px;margin:0}
+  .cmp th{white-space:nowrap}
+  .cmp th.c-new{color:#fff}
+  .cmp th.c-lp{color:var(--emberA)}
+  .cmp th.c-rd{color:#9dbede}
+  .cmp td{font-size:13px}
+  .cmp td:first-child{color:var(--ash);font-family:'Kanit';font-size:12.5px;min-width:118px}
+  .cmp td:nth-child(2){background:rgba(229,72,77,.07)}
+
   /* ---------- loading ---------- */
   #loadingBox{display:none;text-align:center;padding:26px 14px}
   .coal{width:64px;height:64px;margin:0 auto 14px;border-radius:50%;
@@ -266,7 +277,7 @@
     <button class="settings-toggle" id="btnClearHist">ล้างประวัติทั้งหมด</button>
   </section>
 
-  <footer>JJ Site Scanner v1.1 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v1.2 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -283,6 +294,36 @@ const DIM_NAMES = [
   'D4 ชีวิตกลางคืนหลัง 22:00 (15%)','D5 การเดินทาง+ที่จอด (10%)','D6 ลักษณะถนน/ทำเล (10%)',
   'D7 การแข่งขัน format ใหญ่ (10%)','D8 ความเหมาะสมสถานที่ (10%)'
 ];
+const BRANCH_BASE = {
+  lp: {
+    sales:'4.0 ลบ. (ยอดจริง — เปิด 1 ปี)', cust:'~360 คน',
+    popReg:'เขตลาดพร้าว ~120,000 + ขอบจตุจักร/บึงกุ่ม',
+    popAct:'ประชากรแฝงต่ำ — ย่านบ้านเจ้าของอยู่เอง',
+    housing:'หมู่บ้าน/ทาวน์โฮมเกือบทั้งหมด',
+    house:'บ้าน 4–10 ลบ. (กลาง–กลางบน)', condo:'คอนโดน้อยมาก',
+    night:'พีคเดียว 18:00–21:30 — หลัง 4 ทุ่มเบา',
+    transit:'รถยนต์ ~100% ไม่มีรถไฟฟ้า ที่จอดคือหัวใจ',
+    comp:'เบา — ไม่มี format ตรงประชิด (จุดที่ทำให้ชนะ)'
+  },
+  rd: {
+    sales:'7.5 ลบ. เดือนแรก (วางแผนที่ 5–6.5)', cust:'~670 คน',
+    popReg:'ห้วยขวาง ~80,000 (ทะเบียนต่ำกว่าจริงมาก)',
+    popAct:'แฝงสูงมาก — คอนโดตลอดแนวรัชดา–สุทธิสาร',
+    housing:'คอนโด/อพาร์ตเมนต์เป็นหลัก',
+    house:'บ้านน้อย', condo:'คอนโด ~80–120K/ตรม.',
+    night:'พีคสอง 22:00–01:00 = แต้มต่อยอด 20–30%',
+    transit:'MRT ห้วยขวาง/สุทธิสาร + รถ + เดินจากคอนโด',
+    comp:'หนาแน่น แต่ demand ล้น supply'
+  }
+};
+function salesToCust(s){
+  const m = String(s||'').match(/[0-9]+(?:\.[0-9]+)?/g);
+  if(!m) return '';
+  const v = m.map(Number).filter(x=>x>0 && x<=20);
+  if(!v.length) return '';
+  const f = x => Math.round(x*1000000/30/370);
+  return v.length>1 ? '~'+f(v[0])+'–'+f(v[1])+' คน (ประเมิน)' : '~'+f(v[0])+' คน (ประเมิน)';
+}
 const MODEL_NAME = 'claude-sonnet-4-6';
 const HIST_KEY = 'jj3scan_history_v1';
 const KEY_KEY  = 'jj3scan_apikey';
@@ -609,6 +650,33 @@ function render(r){
     '</table><div class="muted">ประมาณจากโครงสร้างที่อยู่อาศัย-สถานประกอบการในย่าน + สถิติแรงงานระดับจังหวัด/salary guide — ไม่ใช่สถิติทางการรายแขวง</div>'
     : '';
 
+  const B = BRANCH_BASE;
+  const compCell = (r.competitors&&r.competitors.length)
+    ? r.competitors.length+' ร้าน: '+r.competitors.slice(0,3).map(c=>c.name).join(', ')+(r.competitors.length>3?' …':'')
+    : 'ไม่พบจากการค้น — เช็คภาคสนาม';
+  const distCell = (dLP!==null) ? ('LP '+dLP.toFixed(1)+' / RD '+dRD.toFixed(1)+' กม.') : '—';
+  const cmpRows = [
+    ['โมเดล / ความคล้าย', lpPct+'% A · '+rdPct+'% B — เกรด '+grade, 'ต้นแบบโมเดล A', 'ต้นแบบโมเดล B'],
+    ['ยอดขาย/เดือน', r.sales||'-', B.lp.sales, B.rd.sales],
+    ['ลูกค้า/วัน (ที่ ~370 บ./หัว)', salesToCust(r.sales)||'—', B.lp.cust, B.rd.cust],
+    ['ประชากรทะเบียน', r.pop_registered||r.population||'-', B.lp.popReg, B.rd.popReg],
+    ['อาศัยจริง / แฝง', r.pop_actual||'-', B.lp.popAct, B.rd.popAct],
+    ['ที่อยู่อาศัยหลัก', r.housing||'-', B.lp.housing, B.rd.housing],
+    ['ราคาบ้าน', r.house_price||'-', B.lp.house, B.rd.house],
+    ['ราคาคอนโด', r.condo_price||'-', B.lp.condo, B.rd.condo],
+    ['ชีวิตกลางคืน', r.nightlife||'-', B.lp.night, B.rd.night],
+    ['การเดินทาง', r.transit||'-', B.lp.transit, B.rd.transit],
+    ['คู่แข่ง format ใหญ่', compCell, B.lp.comp, B.rd.comp],
+    ['ระยะห่างจากสาขาเดิม', distCell, '—', '—']
+  ];
+  const cmpHtml =
+    '<div class="sec-label">เทียบกับ 2 สาขาต้นแบบ</div>'+
+    '<div class="cmp-wrap"><table class="cmp">'+
+    '<tr><th>หัวข้อ</th><th class="c-new">ทำเลที่สแกน</th><th class="c-lp">ลาดพร้าววังหิน (A)</th><th class="c-rd">รัชดา (B)</th></tr>'+
+    cmpRows.map(row=>'<tr><td>'+esc(row[0])+'</td><td>'+esc(row[1])+'</td><td>'+esc(row[2])+'</td><td>'+esc(row[3])+'</td></tr>').join('')+
+    '</table></div>'+
+    '<div class="muted">คอลัมน์สาขาต้นแบบเป็นข้อมูล baseline ฝังในแอพจากรายงานวิเคราะห์ ส.ค. 2569 — คอลัมน์ทำเลที่สแกนมาจากการรีเสิร์ชสดรอบนี้</div>';
+
   $('resultBox').innerHTML =
     '<div class="area-title">'+esc(r.area||'-')+'</div>'+
     '<div class="area-meta">'+esc(r.summary||'')+gmap+'</div>'+banner+
@@ -626,6 +694,7 @@ function render(r){
       '<span class="chip">'+esc(model)+'</span>'+
       '<span class="chip">ศักยภาพยอด: <b>'+esc(r.sales||'-')+'</b></span>'+
     '</div>'+
+    cmpHtml+
     '<div class="sec-label">ประชากรในรัศมี</div>'+
     '<div class="duo">'+
       '<div class="stat"><div class="lb">ทะเบียนราษฎร์</div><div class="vl">'+esc(r.pop_registered||r.population||'-')+'</div></div>'+
