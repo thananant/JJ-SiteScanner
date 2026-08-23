@@ -375,6 +375,8 @@
         • ข้อมูลทั้งสองทางถูกรวมเข้าชุดเดียว จำไว้ในเครื่อง แตะหมุด/รายการเพื่อดูรายละเอียดและเปิดใน Google Maps
       </div>
       <div class="err" id="qErr"></div>
+      <label style="margin-top:12px">ค้นหาในรายการที่เก็บไว้ — พิมพ์แล้วกรองทันที ทั้งรายการและหมุดบนแผนที่</label>
+      <input id="qListSearch" placeholder="เช่น ตี๋น้อย, หมูกระทะ, นวลจันทร์" autocomplete="off">
       <div class="qf-label">จัดกลุ่มรายการ</div>
       <div id="qViewChips"></div>
       <div class="qf-label">กรองโซน — แตะเลือกได้หลายโซนพร้อมกัน</div>
@@ -395,6 +397,7 @@
         <div></div>
       </div>
       <div class="muted" id="qStatus" style="margin-top:6px"></div>
+      <button class="qmini" id="btnQResetFilter" style="margin-top:6px">รีเซ็ตตัวกรองทั้งหมด (จุดหาย? กดนี่ก่อน)</button>
       <div class="qbtnrow">
         <button class="qbtn" id="btnQAnalyze">วิเคราะห์ข้อมูลทั้งหมดด้วย AI</button>
         <button class="qbtn alt" id="btnQExport">ดาวน์โหลดข้อมูล (.json)</button>
@@ -417,7 +420,7 @@
     </section>
   </div>
 
-  <footer>JJ Site Scanner v3.1 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v3.3 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -1074,16 +1077,33 @@ async function cloudPullScans(){
 async function cloudDeleteScan(ts){ return sbFetch('jj3_scans?ts=eq.'+encodeURIComponent(ts), {method:'DELETE', headers:{'Prefer':'return=minimal'}}); }
 async function cloudPushQ(items){
   if(!items || !items.length) return;
-  return sbFetch('jj3_queue_spots?on_conflict=key', {method:'POST', headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},
-    body: JSON.stringify(items.map(it=>({key:qKeyOf(it), name:it.name, lat:it.lat, lng:it.lng, zone:it.zone||'', type:it.type||'',
-      queue_evidence:it.queue_evidence||'', rating:String(it.rating||''), reviews:(Number(it.reviews)||null), url:it.url||'', src:it.src||'',
-      pid:it.pid||'', rv:(it.rv&&it.rv.length? it.rv : null), hist:(it.hist&&it.hist.length? it.hist : null), deep:(it.deep||null)})))});
+  const base = it => ({key:qKeyOf(it), name:it.name, lat:it.lat, lng:it.lng, zone:it.zone||'', type:it.type||'',
+    queue_evidence:it.queue_evidence||'', rating:String(it.rating||''), reviews:(Number(it.reviews)||null), url:it.url||'', src:it.src||''});
+  const full = it => Object.assign(base(it), {pid:it.pid||'', rv:(it.rv&&it.rv.length? it.rv : null),
+    hist:(it.hist&&it.hist.length? it.hist : null), deep:(it.deep||null)});
+  const post = rows => sbFetch('jj3_queue_spots?on_conflict=key',
+    {method:'POST', headers:{'Prefer':'resolution=merge-duplicates,return=minimal'}, body: JSON.stringify(rows)});
+  try{
+    return await post(items.map(full));
+  }catch(err){
+    if(/column|schema/i.test(String(err.message||''))){
+      SYNC_STATE = 'err:ตารางคลาวด์ยังไม่มีคอลัมน์ใหม่ — รันไฟล์ jj3-supabase-setup.sql เวอร์ชันล่าสุดใน SQL Editor หนึ่งครั้ง (ระหว่างนี้ซิงก์แบบย่อให้ก่อน)';
+      updateSyncBadge();
+      return post(items.map(base));
+    }
+    throw err;
+  }
 }
 async function cloudPullQ(){
   const rows = await sbFetch('jj3_queue_spots?select=*&limit=3000', {method:'GET'});
   return (rows||[]).map(x=>({name:x.name, lat:Number(x.lat), lng:Number(x.lng), zone:x.zone||'', type:x.type||'',
     queue_evidence:x.queue_evidence||'', rating:x.rating||'', reviews:x.reviews||'', url:x.url||'', src:x.src||'',
     pid:x.pid||'', rv:(x.rv||null), hist:(x.hist||null), deep:(x.deep||null)}));
+}
+function mergeHist(a, b){
+  const m = {};
+  (a||[]).concat(b||[]).forEach(s=>{ if(s && s.t) m[s.t] = s; });
+  return Object.keys(m).map(k=>m[k]).sort((x,y)=>x.t-y.t).slice(-60);
 }
 function updateSyncBadge(){
   const el = $('sbStatus'); if(!el) return;
@@ -1104,10 +1124,29 @@ async function syncFromCloud(showErr){
     for(const r of toPush){ try{ await cloudPushScan(r); }catch(e){} }
     const qc = await cloudPullQ();
     const d = loadQData();
+    const localByKey = {};
+    d.items.forEach(it=>{ localByKey[qKeyOf(it)] = it; });
     const qSeen = new Set(qc.map(qKeyOf));
     const localOnly = d.items.filter(it=>!qSeen.has(qKeyOf(it)));
-    d.items = qc.concat(localOnly); saveQData(d);
+    const pushBack = [];
+    const mergedQ = qc.map(c=>{
+      const l = localByKey[qKeyOf(c)];
+      if(!l) return c;
+      const m = Object.assign({}, c);
+      // เก็บฝั่งที่ข้อมูลแน่นกว่าเสมอ (กันคลาวด์เวอร์ชันเก่าทับของในเครื่อง)
+      if((Number(l.reviews)||0) > (Number(c.reviews)||0)){ m.reviews = l.reviews; m.rating = l.rating || c.rating; }
+      if(!m.rating && l.rating) m.rating = l.rating;
+      if(!m.pid && l.pid) m.pid = l.pid;
+      if(!m.url && l.url) m.url = l.url;
+      if(!(m.rv && m.rv.length) && l.rv && l.rv.length) m.rv = l.rv;
+      if(!m.deep && l.deep) m.deep = l.deep;
+      m.hist = mergeHist(l.hist, c.hist);
+      if(m.reviews !== c.reviews || m.rv !== c.rv || m.deep !== c.deep || (m.hist||[]).length !== (c.hist||[]).length) pushBack.push(m);
+      return m;
+    });
+    d.items = mergedQ.concat(localOnly); saveQData(d);
     if(localOnly.length){ try{ await cloudPushQ(localOnly); }catch(e){} }
+    if(pushBack.length){ try{ await cloudPushQ(pushBack); }catch(e){} }
     SYNC_STATE = 'ok'; updateSyncBadge();
     if(qMap) redrawQMarkers();
   }catch(err){
@@ -1144,9 +1183,13 @@ function qTier(it){
   if(n >= 200)  return {c:'#58a66e', t:'200–499 รีวิว', k:'g'};
   return null; // ต่ำกว่า 200 หรือไม่ทราบ — ไม่ปักหมุด
 }
-const qFilter = { zones: new Set(), tiers: new Set(['r','y','g']), maxR: 0 };
+const qFilter = { zones: new Set(), tiers: new Set(['r','y','g']), maxR: 0, text: '' };
 function qApplyFilter(items){
   return items.filter(it=>{
+    if(qFilter.text){
+      const hay = ((it.name||'')+' '+(it.type||'')+' '+(it.zone||'')).toLowerCase();
+      if(hay.indexOf(qFilter.text) === -1) return false;
+    }
     if($('qBuffetOnly').checked && !BUFFET_RE.test((it.name||'')+' '+(it.type||''))) return false;
     if(qFilter.zones.size && !qFilter.zones.has(it.zone||'ไม่ระบุโซน')) return false;
     const t = qTier(it);
@@ -1351,9 +1394,11 @@ function redrawQMarkers(){
   }else if(!items.length){
     $('qStatus').textContent = 'ไม่มีร้านตรงตัวกรอง (ทั้งหมด '+all.length+' ร้าน) — ปรับตัวกรองด้านบน';
   }else{
-    $('qStatus').textContent = 'ผ่านตัวกรอง '+items.length+' ร้าน จากทั้งหมด '+all.length
-      +' • หมุดบนแผนที่ '+plotted+' ร้าน'
-      +(hidden>0?(' (อีก '+hidden+' ร้านต่ำกว่า 200 รีวิว — อยู่ในรายการ)'):'')
+    const cut = all.length - items.length;
+    $('qStatus').textContent = 'หมุดบนแผนที่ '+plotted+' ร้าน'
+      +(hidden>0?(' • อีก '+hidden+' ร้านต่ำกว่า 200 รีวิว/ไม่ทราบยอด (อยู่ในรายการ)'):'')
+      +(cut>0?(' • ตัวกรองตัดออก '+cut+' ร้าน — จุดหายให้กดรีเซ็ตตัวกรอง'):'')
+      +' • ทั้งหมด '+all.length+' ร้าน'
       +(loadQData().updated?(' • อัปเดต '+fmtDate(loadQData().updated)):'');
   }
 }
@@ -1795,6 +1840,17 @@ $('tabQueue').addEventListener('click', ()=>switchTab('queue'));
 $('btnQAi').addEventListener('click', ()=> runQFetch($('btnQAi'), qFetchAI));
 $('btnQSweep').addEventListener('click', qSweepAll);
 $('btnQSearchAdd').addEventListener('click', qSearchPlaces);
+$('btnQResetFilter').addEventListener('click', ()=>{
+  $('qListSearch').value = '';
+  qFilter.text = '';
+  qFilter.zones.clear();
+  qFilter.tiers = new Set(['r','y','g']);
+  qFilter.maxR = 0;
+  $('qMaxRating').value = '0';
+  $('qBuffetOnly').checked = false;
+  bindTierChips();
+  redrawQMarkers();
+});
 $('inGKey') && $('qSearchName').addEventListener('keydown', e=>{ if(e.key==='Enter') qSearchPlaces(); });
 $('btnOwnFetch').addEventListener('click', ownFetch);
 $('btnOwnAnalyze').addEventListener('click', ownAnalyze);
@@ -1863,6 +1919,11 @@ $('btnSbSync').addEventListener('click', ()=>{
   bindTierChips();
   try{ const own = JSON.parse(store.get(OWN_KEY)||'null'); if(own && own.lp) renderOwn(own); }catch(e){}
   $('qMaxRating').addEventListener('change', ()=>{ qFilter.maxR = Number($('qMaxRating').value)||0; redrawQMarkers(); });
+  let qSearchT = null;
+  $('qListSearch').addEventListener('input', ()=>{
+    clearTimeout(qSearchT);
+    qSearchT = setTimeout(()=>{ qFilter.text = $('qListSearch').value.trim().toLowerCase(); redrawQMarkers(); }, 150);
+  });
   attachSugg('inSubdistrict','sgSub','sub');
   attachSugg('inDistrict','sgDist','dist');
   attachSugg('inProvince','sgProv','prov');
