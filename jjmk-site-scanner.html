@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
 <style>
   :root{
     --charcoal:#171310;      /* ถ่านเย็น */
@@ -342,6 +343,7 @@
         <span><i style="background:#d9a036"></i>สาขาจริงใจ</span>
         <span><i style="background:#6e8fb2"></i>ทำเลที่สแกน</span>
       </div>
+      <label><input type="checkbox" id="qHeatOn" style="width:auto;margin-right:8px">ฮีทแมพความหนาแน่นรีวิว — จุดร้อน = รีวิวสะสมเยอะ (ตามตัวกรองปัจจุบัน)</label>
       <div class="qbtnrow">
         <button class="qbtn" id="btnQSweep">สแกนทุกโซนอัตโนมัติ (20 โซน)</button>
         <button class="qbtn alt" id="btnQGoogle">สแกนเฉพาะโซนที่เลือก</button>
@@ -400,6 +402,7 @@
       <button class="qmini" id="btnQResetFilter" style="margin-top:6px">รีเซ็ตตัวกรองทั้งหมด (จุดหาย? กดนี่ก่อน)</button>
       <div class="qbtnrow">
         <button class="qbtn" id="btnQAnalyze">วิเคราะห์ข้อมูลทั้งหมดด้วย AI</button>
+        <button class="qbtn alt" id="btnQDeepAll">สืบประวัติสายบุฟเฟต์ทั้งหมด</button>
         <button class="qbtn alt" id="btnQExport">ดาวน์โหลดข้อมูล (.json)</button>
       </div>
       <div id="qAnalysisOut" class="verdict" style="display:none;white-space:pre-wrap"></div>
@@ -420,7 +423,7 @@
     </section>
   </div>
 
-  <footer>JJ Site Scanner v3.3 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v3.4 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -1332,7 +1335,7 @@ function loadGoogleMap(gk){
     redrawQMarkers();
   };
   const s = document.createElement('script');
-  s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(gk) + '&callback=__jjGInit&language=th&region=TH';
+  s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(gk) + '&callback=__jjGInit&language=th&region=TH&libraries=visualization';
   s.onerror = function(){ $('qErr').textContent = 'โหลด Google Maps ไม่สำเร็จ — เช็ค key/การเปิดใช้ Maps JavaScript API (ใช้แผนที่สำรองไปก่อน)'; $('qErr').style.display='block'; initLeafletMap(); };
   document.head.appendChild(s);
 }
@@ -1388,6 +1391,7 @@ function redrawQMarkers(){
     mks[qKeyOf(it)] = addQMarker(it.lat, it.lng, tier.c, html, (Number(it.reviews)||0) >= 1000);
   });
   renderQList(items, mks);
+  drawHeat(items);
   const hidden = items.length - plotted;
   if(!all.length){
     $('qStatus').textContent = 'ยังไม่มีข้อมูล — กดปุ่มรวบรวมด้านบนได้เลย';
@@ -1520,7 +1524,16 @@ async function deepDive(k, panel){
   const before = panel.innerHTML;
   panel.innerHTML = '<div class="d">กำลังสืบประวัติร้านจากเว็บ (~30–60 วินาที)…</div>';
   try{
-    const voice = (it.rv && it.rv.length)
+    await deepFetch(it);
+    saveQData(d);
+    cloudPushQ([it]).catch(()=>{});
+    panel.innerHTML = rvHtml(it);
+  }catch(err){
+    panel.innerHTML = before + '<div class="d">สืบประวัติไม่สำเร็จ: '+esc(err.message||err)+'</div>';
+  }
+}
+async function deepFetch(it){
+  const voice = (it.rv && it.rv.length)
       ? ('\n\nข้อความรีวิวจริงจาก Google Maps ของร้านนี้ (ใช้เป็นวัตถุดิบหลักในการสรุป):\n' + it.rv.map(r=>'- ('+(r.r||'?')+'★) '+String(r.x||'').replace(/\s+/g,' ').slice(0,240)).join('\n'))
       : '';
     const p = 'สืบข้อมูลร้านอาหาร "'+it.name+'" ย่าน '+(it.zone||'กรุงเทพฯ/ปริมณฑล')+' ด้วย web_search 3-5 ครั้ง (เช่น ชื่อร้าน+เปิดปีไหน, ชื่อร้าน+รีวิว, ชื่อร้าน+pantip, ชื่อร้าน+wongnai) แล้วอ่านรีวิว/บทความที่พบให้จริง'+voice+'\n\nตอบเป็น JSON ล้วนเท่านั้น:\n{"opened":"วันที่/ปี พ.ศ. ที่เปิด — ถ้าหาวันเปิดจริงไม่เจอ ให้ประมาณจากหลักฐานเก่าสุดที่พบแทน (รีวิวแรกสุดใน Google/Wongnai/Pantip หรือโพสต์แรกของเพจร้าน) เขียนรูปแบบ: ประมาณ พ.ศ. xxxx (อิงรีวิวเก่าสุดที่พบ) — ใส่ ไม่พบข้อมูล เฉพาะเมื่อไม่มีร่องรอยใดๆ เลย","trend":"กระแสขาขึ้น/ขาลง + เหตุการณ์ล่าสุด 1 ประโยค","why":"เหตุผลหลักที่คิวยาว 1 ประโยค","pros":["ด้านดีที่ลูกค้าชมซ้ำๆ 3-5 ข้อ สั้นๆ"],"cons":["ด้านไม่ดีที่ลูกค้าติ 2-4 ข้อ"],"pain":["pain point ที่ทำลูกค้าหงุดหงิด/เสียประสบการณ์ 2-4 ข้อ ระบุให้จับต้องได้ เช่น รอคิวกี่นาที ที่จอดไม่พอ ของหมดช่วงไหน บริการช้า ควันแสบตา"]}\nกติกา: สรุปจากรีวิว/ข้อมูลที่พบจริงเท่านั้น ห้ามเดา ข้อไหนไม่พบใส่ "ไม่พบข้อมูล" หรือ [] | แยกให้ชัด: cons = คุณภาพร้านที่แย่, pain = ความลำบากของลูกค้าแม้ร้านจะดี';
@@ -1530,12 +1543,7 @@ async function deepDive(k, panel){
     const s = t.indexOf('{'), e = t.lastIndexOf('}');
     if(s===-1 || e===-1) throw new Error('ไม่ได้คำตอบที่ใช้ได้ — ลองกดใหม่');
     it.deep = JSON.parse(t.slice(s, e+1));
-    saveQData(d);
-    cloudPushQ([it]).catch(()=>{});
-    panel.innerHTML = rvHtml(it);
-  }catch(err){
-    panel.innerHTML = before + '<div class="d">สืบประวัติไม่สำเร็จ: '+esc(err.message||err)+'</div>';
-  }
+    return it.deep;
 }
 async function gplaceDetails(pid, gk){
   const res = await fetch('https://places.googleapis.com/v1/places/'+encodeURIComponent(pid), {
@@ -1544,6 +1552,23 @@ async function gplaceDetails(pid, gk){
   if(!res.ok){ let m=''; try{ const j=await res.json(); m=(j.error&&j.error.message)||''; }catch(e){}
     throw new Error('Place Details '+res.status+(m?' — '+m:'')); }
   return res.json();
+}
+async function fetchReviewsFor(it, gk){
+  if(!it.pid){
+    const cand = await gplacesSearch(it.name, Number(it.lat), Number(it.lng), gk);
+    if(!cand.length || !cand[0].id) throw new Error('หา place id ของร้านนี้ไม่เจอ — ลองสแกนโซนนี้ใหม่');
+    it.pid = cand[0].id;
+  }
+  const det = await gplaceDetails(it.pid, gk);
+  if(det.rating) it.rating = det.rating;
+  if(det.userRatingCount) it.reviews = det.userRatingCount;
+  it.rv = (det.reviews||[]).slice(0,5).map(r=>({
+    r: r.rating||'', t: r.relativePublishTimeDescription||'',
+    p: r.publishTime||'',
+    x: (r.text&&r.text.text) || (r.originalText&&r.originalText.text) || '',
+    a: (r.authorAttribution&&r.authorAttribution.displayName) || ''
+  }));
+  it.hist = snapPush(it.hist, it);
 }
 async function toggleReviews(k, panel){
   if(panel.style.display === 'block'){ panel.style.display='none'; return; }
@@ -1556,21 +1581,7 @@ async function toggleReviews(k, panel){
   if(!gk){ panel.innerHTML = '<div class="d">การดึงข้อความรีวิวต้องมี Google Maps API key (ช่องด้านบน) — ระหว่างนี้กด "เปิดใน Google Maps" อ่านได้เลย</div>'; return; }
   panel.innerHTML = '<div class="d">กำลังดึงรีวิว…</div>';
   try{
-    if(!it.pid){
-      const cand = await gplacesSearch(it.name, Number(it.lat), Number(it.lng), gk);
-      if(!cand.length || !cand[0].id) throw new Error('หา place id ของร้านนี้ไม่เจอ — ลองสแกนโซนนี้ใหม่');
-      it.pid = cand[0].id;
-    }
-    const det = await gplaceDetails(it.pid, gk);
-    if(det.rating) it.rating = det.rating;
-    if(det.userRatingCount) it.reviews = det.userRatingCount;
-    it.rv = (det.reviews||[]).slice(0,5).map(r=>({
-      r: r.rating||'', t: r.relativePublishTimeDescription||'',
-      p: r.publishTime||'',
-      x: (r.text&&r.text.text) || (r.originalText&&r.originalText.text) || '',
-      a: (r.authorAttribution&&r.authorAttribution.displayName) || ''
-    }));
-    it.hist = snapPush(it.hist, it);
+    await fetchReviewsFor(it, gk);
     saveQData(d);
     cloudPushQ([it]).catch(()=>{});
     panel.innerHTML = rvHtml(it);
@@ -1808,6 +1819,100 @@ async function ownAnalyze(){
   }finally{ btn.disabled = false; btn.textContent = t0; }
 }
 
+/* ---------- สืบประวัติสายบุฟเฟต์ทั้งหมด ---------- */
+let qDeepRun = false;
+async function qDeepAll(){
+  const btn = $('btnQDeepAll');
+  if(qDeepRun){ qDeepRun = false; btn.textContent = 'กำลังหยุด…'; return; }
+  const targets = qApplyFilter(loadQData().items)
+    .filter(it => BUFFET_RE.test((it.name||'')+' '+(it.type||'')) && !(it.deep && it.deep.pros));
+  if(!targets.length){ alert('ร้านสายบุฟเฟต์/ชาบู/หมูกระทะ/ปิ้งย่าง ที่ผ่านตัวกรอง ถูกสืบครบหมดแล้ว'); return; }
+  const mins = Math.ceil(targets.length * 0.4);
+  if(!confirm('จะสืบประวัติ '+targets.length+' ร้าน (สายบุฟเฟต์ที่ผ่านตัวกรองและยังไม่เคยสืบ)\n• ใช้เวลาราว '+mins+'–'+(mins*2)+' นาที (ทำขนาน 2 ร้าน)\n• ค่า API ประมาณ '+(targets.length*2)+'–'+(targets.length*5)+' บาท\n• กดปุ่มเดิมซ้ำเพื่อหยุดได้ ผลที่สืบแล้วบันทึกทันทีไม่หาย\nเริ่มเลยไหม?')) return;
+  qDeepRun = true;
+  const gk = (($('inGKey').value||'').trim()) || ((store.get(GKEY_KEY)||'').trim());
+  let done = 0, fail = 0;
+  const queue = targets.slice();
+  const total = targets.length;
+  btn.textContent = 'หยุดสืบ (0/'+total+')';
+  async function worker(){
+    while(qDeepRun && queue.length){
+      const it = queue.shift();
+      try{
+        if(gk && !(it.rv && it.rv.length)){ try{ await fetchReviewsFor(it, gk); }catch(e){} }
+        await deepFetch(it);
+        const dd = loadQData();
+        const ex = dd.items.find(x=>qKeyOf(x)===qKeyOf(it));
+        if(ex){
+          ex.deep = it.deep;
+          if(it.rv && it.rv.length) ex.rv = it.rv;
+          if(it.pid) ex.pid = it.pid;
+          if(it.rating) ex.rating = it.rating;
+          if(it.reviews) ex.reviews = it.reviews;
+          if(it.hist) ex.hist = it.hist;
+          saveQData(dd);
+          cloudPushQ([ex]).catch(()=>{});
+        }
+        done++;
+      }catch(e){ fail++; }
+      btn.textContent = 'หยุดสืบ ('+(done+fail)+'/'+total+')';
+      $('qStatus').textContent = 'สืบประวัติแล้ว '+done+' ร้าน'+(fail?(' • พลาด '+fail):'')+' • เหลือในคิว '+queue.length;
+    }
+  }
+  try{
+    await Promise.all([worker(), worker()]);
+  } finally {
+    const stopped = !qDeepRun && queue.length > 0;
+    qDeepRun = false;
+    btn.textContent = 'สืบประวัติสายบุฟเฟต์ทั้งหมด';
+    redrawQMarkers();
+    $('qStatus').textContent = (stopped ? 'หยุดตามสั่ง — ' : 'สืบครบแล้ว — ')+'สำเร็จ '+done+' ร้าน'+(fail?(' • พลาด '+fail+' ร้าน (กดปุ่มซ้ำเพื่อเก็บตก)'):'');
+  }
+}
+
+/* ---------- ฮีทแมพความหนาแน่นรีวิว ---------- */
+let qHeatLayer = null;
+function clearHeat(){
+  if(!qHeatLayer || !qMap) { qHeatLayer = null; return; }
+  const arr = Array.isArray(qHeatLayer) ? qHeatLayer : [qHeatLayer];
+  arr.forEach(h=>{
+    try{ if(qEngine === 'l') qMap.removeLayer(h); else h.setMap(null); }catch(e){}
+  });
+  qHeatLayer = null;
+}
+function drawHeat(items){
+  clearHeat();
+  if(!qMap || !$('qHeatOn').checked) return;
+  const pts = items.filter(it=>Number(it.reviews) > 0 && isFinite(it.lat) && isFinite(it.lng));
+  if(!pts.length) return;
+  const w = it => Math.sqrt(Number(it.reviews));
+  const maxW = Math.max.apply(null, pts.map(w));
+  if(qEngine === 'l'){
+    if(typeof L.heatLayer === 'function'){
+      qHeatLayer = L.heatLayer(
+        pts.map(it=>[Number(it.lat), Number(it.lng), w(it)/maxW]),
+        {radius: 34, blur: 26, maxZoom: 14, minOpacity: .25}
+      ).addTo(qMap);
+    } else {
+      qHeatLayer = pts.map(it=>L.circle([Number(it.lat), Number(it.lng)],
+        {radius: 300 + 1400*w(it)/maxW, stroke:false, fillColor:'#ff5a3c', fillOpacity:.15}).addTo(qMap));
+    }
+  } else {
+    if(window.google && google.maps.visualization && google.maps.visualization.HeatmapLayer){
+      qHeatLayer = new google.maps.visualization.HeatmapLayer({
+        data: pts.map(it=>({location: new google.maps.LatLng(Number(it.lat), Number(it.lng)), weight: w(it)})),
+        radius: 45, opacity: .7, map: qMap
+      });
+    } else {
+      qHeatLayer = pts.map(it=>new google.maps.Circle({
+        center:{lat:Number(it.lat), lng:Number(it.lng)},
+        radius: 300 + 1400*w(it)/maxW, strokeWeight: 0,
+        fillColor:'#ff5a3c', fillOpacity:.15, map:qMap
+      }));
+    }
+  }
+}
+
 /* ---------- ปุ่ม/อีเวนต์หน้า 2 ---------- */
 async function runQFetch(btn, fn){
   $('qErr').style.display='none';
@@ -1856,6 +1961,8 @@ $('btnOwnFetch').addEventListener('click', ownFetch);
 $('btnOwnAnalyze').addEventListener('click', ownAnalyze);
 $('btnQGoogle').addEventListener('click', ()=> runQFetch($('btnQGoogle'), qFetchGoogle));
 $('qBuffetOnly').addEventListener('change', redrawQMarkers);
+$('qHeatOn').addEventListener('change', redrawQMarkers);
+$('btnQDeepAll').addEventListener('click', qDeepAll);
 $('btnQAnalyze').addEventListener('click', async ()=>{
   const items = qApplyFilter(loadQData().items);
   if(!items.length){ alert('ไม่มีร้านตรงตัวกรอง — ปรับตัวกรองหรือรวบรวมข้อมูลก่อน (การวิเคราะห์ใช้เฉพาะร้านที่ผ่านตัวกรองปัจจุบัน)'); return; }
