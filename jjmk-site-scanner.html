@@ -218,6 +218,8 @@
     font-family:'Kanit';font-size:12.5px;padding:4px 12px;border-radius:8px;cursor:pointer;margin-right:8px;text-decoration:none}
   .qmini:active{background:rgba(229,72,77,.15)}
   .qrev{margin-top:8px;border-top:1px dashed var(--line);padding-top:6px}
+  .qmini.done-deep{background:linear-gradient(135deg,#e5484d,#d9a036);border-color:transparent;color:#fff;font-weight:500}
+  .qmini.done-rv{border-color:#58a66e;color:#8fd3a5}
   .qrv-item{background:var(--charcoal);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:6px 0;font-size:13.5px}
   .tdot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:7px;vertical-align:-1px;border:1px solid rgba(255,255,255,.25)}
   .qf-label{font-size:12.5px;color:var(--ash);margin:10px 0 4px;font-family:'Kanit'}
@@ -423,7 +425,7 @@
     </section>
   </div>
 
-  <footer>JJ Site Scanner v3.5 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v3.7 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -1417,8 +1419,8 @@ function renderQList(items, mks){
       '<span class="rv">'+(it.reviews? Number(it.reviews).toLocaleString()+' รีวิว':'')+(it.rating? ' • '+it.rating+'★':'')+'</span>'+
       '<i class="tdot" style="background:'+((qTier(it)||{c:'#57504a'}).c)+'"></i><b>'+esc(it.name)+'</b>'+
       '<div class="d">'+esc(it.zone||'')+(it.type?' • '+esc(it.type):'')+' — '+esc(it.queue_evidence||'')+'</div>'+
-      '<div class="qact"><button class="qmini" data-rvbtn="'+k+'">อ่านรีวิว</button>'+
-      '<button class="qmini" data-deepbtn="'+k+'">สืบประวัติ (AI)</button>'+
+      '<div class="qact"><button class="qmini'+((it.rv&&it.rv.length)?' done-rv':'')+'" data-rvbtn="'+k+'">'+((it.rv&&it.rv.length)?'✓ อ่านรีวิว':'อ่านรีวิว')+'</button>'+
+      '<button class="qmini'+((it.deep&&it.deep.pros)?' done-deep':'')+'" data-deepbtn="'+k+'">'+((it.deep&&it.deep.pros)?'✓ สืบแล้ว — ดูผล':'สืบประวัติ (AI)')+'</button>'+
       '<a class="qmini" target="_blank" rel="noopener" href="'+esc(gmapsLink(it))+'">เปิดใน Google Maps</a></div>'+
       '<div class="qrev" data-rvpanel="'+k+'" style="display:none"></div>'+
     '</div>';
@@ -1537,6 +1539,14 @@ function rvHtml(it){
   )).join('');
   return head + deep + (body || '<div class="d">ร้านนี้ไม่มีข้อความรีวิวส่งมาจาก API — กด "สืบประวัติ (AI)" หรือเปิดใน Google Maps</div>');
 }
+function markDeepDone(k){
+  const b = $('qList').querySelector('[data-deepbtn="'+k.replace(/"/g,'\\"')+'"]');
+  if(b){ b.classList.add('done-deep'); b.textContent = '✓ สืบแล้ว — ดูผล'; }
+}
+function markRvDone(k){
+  const b = $('qList').querySelector('[data-rvbtn="'+k.replace(/"/g,'\\"')+'"]');
+  if(b){ b.classList.add('done-rv'); b.textContent = '✓ อ่านรีวิว'; }
+}
 async function deepDive(k, panel, force){
   panel.style.display = 'block';
   const d = loadQData();
@@ -1554,6 +1564,7 @@ async function deepDive(k, panel, force){
     saveQData(d);
     cloudPushQ([it]).catch(()=>{});
     panel.innerHTML = rvHtml(it);
+    markDeepDone(k);
   }catch(err){
     if(force && !it.deep && it.deepLog && it.deepLog.length){
       const last = it.deepLog.pop();
@@ -1580,6 +1591,7 @@ async function refetchReviews(k, panel){
     saveQData(d);
     cloudPushQ([it]).catch(()=>{});
     panel.innerHTML = rvHtml(it);
+    markRvDone(k);
   }catch(err){
     if(!(it.rv && it.rv.length) && it.rvLog && it.rvLog.length){
       const last = it.rvLog.pop();
@@ -1643,6 +1655,7 @@ async function toggleReviews(k, panel){
     saveQData(d);
     cloudPushQ([it]).catch(()=>{});
     panel.innerHTML = rvHtml(it);
+    markRvDone(k);
   }catch(err){
     panel.innerHTML = '<div class="d">ดึงรีวิวไม่สำเร็จ: '+esc(err.message||err)+'</div>';
   }
@@ -1885,11 +1898,16 @@ async function qDeepAll(){
   const targets = qApplyFilter(loadQData().items)
     .filter(it => BUFFET_RE.test((it.name||'')+' '+(it.type||'')) && !(it.deep && it.deep.pros));
   if(!targets.length){ alert('ร้านสายบุฟเฟต์/ชาบู/หมูกระทะ/ปิ้งย่าง ที่ผ่านตัวกรอง ถูกสืบครบหมดแล้ว'); return; }
+  const ak = ($('inApiKey').value || '').trim();
+  if(!ak){
+    if(!confirm('ยังไม่เห็น Anthropic API key ในตั้งค่า (แท็บสแกนทำเล)\nถ้าเปิดจาก GitHub Pages/ไฟล์ตรง การสืบจะพัง 401 ทุกร้าน — ใส่ key ก่อนดีกว่า\n(กด OK เพื่อฝืนรันต่อ เฉพาะกรณีเปิดผ่านหน้า Claude ที่ไม่ต้องใช้ key)')) return;
+  }
   const mins = Math.ceil(targets.length * 0.4);
   if(!confirm('จะสืบประวัติ '+targets.length+' ร้าน (สายบุฟเฟต์ที่ผ่านตัวกรองและยังไม่เคยสืบ)\n• ใช้เวลาราว '+mins+'–'+(mins*2)+' นาที (ทำขนาน 2 ร้าน)\n• ค่า API ประมาณ '+(targets.length*2)+'–'+(targets.length*5)+' บาท\n• กดปุ่มเดิมซ้ำเพื่อหยุดได้ ผลที่สืบแล้วบันทึกทันทีไม่หาย\nเริ่มเลยไหม?')) return;
   qDeepRun = true;
+  $('qErr').style.display = 'none';
   const gk = (($('inGKey').value||'').trim()) || ((store.get(GKEY_KEY)||'').trim());
-  let done = 0, fail = 0;
+  let done = 0, fail = 0, lastErr = '', fatal = '';
   const queue = targets.slice();
   const total = targets.length;
   btn.textContent = 'หยุดสืบ (0/'+total+')';
@@ -1912,7 +1930,12 @@ async function qDeepAll(){
           cloudPushQ([ex]).catch(()=>{});
         }
         done++;
-      }catch(e){ fail++; }
+      }catch(e){
+        fail++;
+        lastErr = String((e && e.message) || e);
+        // ปัญหาระดับระบบ (key ผิด/ยังไม่ใส่/เครดิตหมด) — ร้านต่อไปก็พังเหมือนกัน หยุดทั้งชุดเลย
+        if(/API key|เครดิต|ยังไม่ได้ใส่|invalid|401|billing/i.test(lastErr)){ fatal = lastErr; qDeepRun = false; }
+      }
       btn.textContent = 'หยุดสืบ ('+(done+fail)+'/'+total+')';
       $('qStatus').textContent = 'สืบประวัติแล้ว '+done+' ร้าน'+(fail?(' • พลาด '+fail):'')+' • เหลือในคิว '+queue.length;
     }
@@ -1920,11 +1943,18 @@ async function qDeepAll(){
   try{
     await Promise.all([worker(), worker()]);
   } finally {
-    const stopped = !qDeepRun && queue.length > 0;
+    const stopped = queue.length > 0 && !fatal;
     qDeepRun = false;
     btn.textContent = 'สืบประวัติสายบุฟเฟต์ทั้งหมด';
     redrawQMarkers();
-    $('qStatus').textContent = (stopped ? 'หยุดตามสั่ง — ' : 'สืบครบแล้ว — ')+'สำเร็จ '+done+' ร้าน'+(fail?(' • พลาด '+fail+' ร้าน (กดปุ่มซ้ำเพื่อเก็บตก)'):'');
+    if(fatal){
+      $('qErr').textContent = 'หยุดทั้งชุด — ทุกร้านติดปัญหาเดียวกัน: '+fatal;
+      $('qErr').style.display = 'block';
+      $('qStatus').textContent = 'สืบสำเร็จ '+done+' ร้าน • ค้างอีก '+(total-done)+' ร้าน — แก้ตามข้อความสีแดงด้านบน แล้วกดปุ่มซ้ำเพื่อทำต่อจากเดิม';
+    } else {
+      $('qStatus').textContent = (stopped ? 'หยุดตามสั่ง — ' : 'สืบครบแล้ว — ')+'สำเร็จ '+done+' ร้าน'
+        +(fail?(' • พลาด '+fail+' ร้าน ('+lastErr.slice(0,120)+') — กดปุ่มซ้ำเพื่อเก็บตก'):'');
+    }
   }
 }
 
