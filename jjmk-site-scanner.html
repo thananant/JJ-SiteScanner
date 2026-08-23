@@ -274,11 +274,14 @@
     <div style="overflow-x:auto">
       <table class="hist-table" id="histTable"></table>
     </div>
-    <div class="muted" style="margin-top:8px">แตะชื่อทำเลเพื่อเปิดผลเต็มอีกครั้ง • ข้อมูลเก็บในเครื่องนี้เท่านั้น</div>
+    <div class="muted" style="margin-top:8px">แตะชื่อทำเลเพื่อเปิดผลเต็มย้อนหลัง • เก็บล่าสุด 50 รายการในเครื่องนี้ — กด "สำรองเป็นไฟล์" เก็บไว้กันหาย หรือเอาไปเปิดต่อเครื่องอื่นด้วย "นำเข้าไฟล์"</div>
+    <button class="settings-toggle" id="btnExportHist" style="margin-right:14px">สำรองเป็นไฟล์ (.json)</button>
+    <button class="settings-toggle" id="btnImportHist" style="margin-right:14px">นำเข้าไฟล์</button>
     <button class="settings-toggle" id="btnClearHist">ล้างประวัติทั้งหมด</button>
+    <input type="file" id="fileImportHist" accept=".json,application/json" style="display:none">
   </section>
 
-  <footer>JJ Site Scanner v1.4 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v1.6 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -550,6 +553,7 @@ function distChip(km, branch){
 }
 
 /* ========== prompt ที่ฝัง framework ทั้งชุด ========== */
+const JSON_SCHEMA = '{"area":"ชื่อย่านสั้นๆ","lat":13.00,"lng":100.00,"summary":"สรุป 2-3 ประโยค","pop_registered":"ตัวเลขทะเบียน+ปี+ที่มา","pop_actual":"ประมาณการผู้อยู่จริงรวมประชากรแฝง + ฐานที่ใช้ประมาณ","housing":"โครงสร้างที่อยู่อาศัย แนวราบ:คอนโด","purchasing":"สรุปกำลังซื้อ 1-2 ประโยค","house_price":"ช่วงราคาบ้านในย่าน","condo_price":"ช่วงราคาคอนโด บาท/ตรม.","nightlife":"...","transit":"...","future":"...","occupations":[{"job":"อาชีพ","share":"~% หรือคำอธิบายสัดส่วน","salary":"x–y บาท/เดือน"}],"competitors":[{"name":"","detail":"","km":0}],"rent":[{"desc":"","price":"","src":""}],"dims":[{"d":1,"lp":0,"rd":0,"why":"เหตุผลสั้น"},{"d":2,"lp":0,"rd":0,"why":""},{"d":3,"lp":0,"rd":0,"why":""},{"d":4,"lp":0,"rd":0,"why":""},{"d":5,"lp":0,"rd":0,"why":""},{"d":6,"lp":0,"rd":0,"why":""},{"d":7,"lp":0,"rd":0,"why":""},{"d":8,"lp":0,"rd":0,"why":""}],"sales":"ประเมิน x–y ลบ./เดือน","grade":"A|B+|B|B-|C|ตัด","verdict":"คำตัดสิน 2-4 ประโยค","checks":["สิ่งที่ต้องเช็คภาคสนาม 3-5 ข้อ"],"sources":[{"t":"ชื่อแหล่ง","u":"url"}]}';
 function buildPrompt(q){
   return `คุณคือนักวิเคราะห์ทำเลร้านอาหารในกรุงเทพฯ/ปริมณฑล ทำงานให้ร้าน "จริงใจหมูกระทะ" (บุฟเฟต์หมูกระทะ+ชาบูในโต๊ะเดียว) เพื่อประเมินพื้นที่เปิดสาขาที่ 3
 
@@ -578,13 +582,13 @@ D1 ความหนาแน่นประชากร/catchment | D2 ปร�
 ## เกรด: A (เจรจาทันที) / B+ / B / B- / C (ไม่คุ้ม) / ตัด — ชั่งจาก ศักยภาพยอด + การแข่งขัน + โอกาสได้พื้นที่ในเพดานเช่า
 
 ## รูปแบบคำตอบ — ตอบเป็น JSON ล้วนเท่านั้น ห้ามมีข้อความอื่นหรือ markdown fence:
-{"area":"ชื่อย่านสั้นๆ","lat":13.00,"lng":100.00,"summary":"สรุป 2-3 ประโยค","pop_registered":"ตัวเลขทะเบียน+ปี+ที่มา","pop_actual":"ประมาณการผู้อยู่จริงรวมประชากรแฝง + ฐานที่ใช้ประมาณ","housing":"โครงสร้างที่อยู่อาศัย แนวราบ:คอนโด","purchasing":"สรุปกำลังซื้อ 1-2 ประโยค","house_price":"ช่วงราคาบ้านในย่าน","condo_price":"ช่วงราคาคอนโด บาท/ตรม.","nightlife":"...","transit":"...","future":"...","occupations":[{"job":"อาชีพ","share":"~% หรือคำอธิบายสัดส่วน","salary":"x–y บาท/เดือน"}],"competitors":[{"name":"","detail":"","km":0}],"rent":[{"desc":"","price":"","src":""}],"dims":[{"d":1,"lp":0,"rd":0,"why":"เหตุผลสั้น"},{"d":2,"lp":0,"rd":0,"why":""},{"d":3,"lp":0,"rd":0,"why":""},{"d":4,"lp":0,"rd":0,"why":""},{"d":5,"lp":0,"rd":0,"why":""},{"d":6,"lp":0,"rd":0,"why":""},{"d":7,"lp":0,"rd":0,"why":""},{"d":8,"lp":0,"rd":0,"why":""}],"sales":"ประเมิน x–y ลบ./เดือน","grade":"A|B+|B|B-|C|ตัด","verdict":"คำตัดสิน 2-4 ประโยค","checks":["สิ่งที่ต้องเช็คภาคสนาม 3-5 ข้อ"],"sources":[{"t":"ชื่อแหล่ง","u":"url"}]}
+${JSON_SCHEMA}
 
-กติกาเข้ม: lat/lng ต้องเป็นจุดกึ่งกลางย่านที่วิเคราะห์จริง | occupations ต้องครบ 10 อาชีพเรียงจากสัดส่วนมากไปน้อย | pop_actual และ occupations เป็นประมาณการได้แต่ต้องมีคำว่า "ประมาณ" และระบุฐานที่ใช้ ห้ามเขียนให้ดูเป็นสถิติทางการ | ตัวเลขอื่นทุกตัวต้องมาจากการค้นจริง ถ้าหาไม่พบให้เขียน "ไม่พบข้อมูล — ต้องเช็คเอง" ห้ามกุตัวเลข | ภาษาไทยกระชับ | dims ต้องครบ 8 ข้อเรียงลำดับ`;
+กติกาเข้ม: ห้ามพิมพ์คำบรรยาย บทนำ หรือสรุประหว่างการค้น — ข้อความตอบทั้งหมดต้องมีแค่ JSON ก้อนเดียว | ทุก field เขียนกระชับไม่เกิน 2 ประโยค | lat/lng ต้องเป็นจุดกึ่งกลางย่านที่วิเคราะห์จริง | occupations ต้องครบ 10 อาชีพเรียงจากสัดส่วนมากไปน้อย (ช่องละ 1 บรรทัดสั้น) | pop_actual และ occupations เป็นประมาณการได้แต่ต้องมีคำว่า "ประมาณ" และระบุฐานที่ใช้ ห้ามเขียนให้ดูเป็นสถิติทางการ | competitors ใส่เฉพาะร้านที่พบจริงเท่านั้น แบรนด์ที่ค้นแล้วไม่พบห้ามใส่ใน array (สรุปรวมสั้นๆ ใน verdict แทน) และใส่ km เฉพาะที่ประเมินได้ | ตัวเลขอื่นทุกตัวต้องมาจากการค้นจริง ถ้าหาไม่พบให้เขียน "ไม่พบข้อมูล — ต้องเช็คเอง" ห้ามกุตัวเลข | dims ต้องครบ 8 ข้อเรียงลำดับ`;
 }
 
 /* ========== เรียก Anthropic API ========== */
-async function callClaude(prompt){
+async function apiCall(body){
   const key = ($('inApiKey').value || '').trim();
   if(key && key.indexOf('sk-ant-') !== 0){
     throw new Error('รูปแบบ key ไม่ถูกต้อง — key จริงจาก platform.claude.com จะขึ้นต้นด้วย sk-ant- (อย่าใช้รหัสผ่าน/บัญชีแอป Claude)');
@@ -601,12 +605,7 @@ async function callClaude(prompt){
   try{
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method:'POST', headers, signal:ctrl.signal,
-      body: JSON.stringify({
-        model: MODEL_NAME,
-        max_tokens: 5000,
-        messages: [{role:'user', content: prompt}],
-        tools: [{type:'web_search_20250305', name:'web_search', max_uses:10}]
-      })
+      body: JSON.stringify(body)
     });
     if(!res.ok){
       let apiMsg = '';
@@ -625,8 +624,24 @@ async function callClaude(prompt){
       throw new Error(msg);
     }
     const data = await res.json();
-    return (data.content || []).map(b => b.type === 'text' ? b.text : '').filter(Boolean).join('\n');
+    return {
+      text: (data.content || []).map(b => b.type === 'text' ? b.text : '').filter(Boolean).join('\n'),
+      stop: data.stop_reason || ''
+    };
   } finally { clearTimeout(timer); }
+}
+async function callClaude(prompt){
+  return apiCall({
+    model: MODEL_NAME,
+    max_tokens: 8000,
+    messages: [{role:'user', content: prompt}],
+    tools: [{type:'web_search_20250305', name:'web_search', max_uses:10}]
+  });
+}
+async function repairTruncated(rawText){
+  const p = 'ข้อความด้านล่างคือผลวิเคราะห์ทำเลร้านอาหารที่ JSON ถูกตัดกลางคันหรือมีข้อความปนมา ให้เขียน JSON ฉบับสมบูรณ์ก้อนเดียวตาม schema นี้ โดยใช้ข้อมูลจากข้อความเท่านั้น ห้ามค้นเพิ่ม ห้ามกุตัวเลขใหม่ ส่วนที่ขาดหาย (เช่น dims 8 ข้อ, sales, grade, verdict, checks, sources) ให้ประเมิน/สรุปจากข้อมูลที่มี ทุก field เขียนกระชับ ตอบเป็น JSON ล้วนห้ามมีข้อความอื่น:\n'
+    + JSON_SCHEMA + '\n\n--- ข้อมูลดิบ ---\n' + rawText;
+  return apiCall({ model: MODEL_NAME, max_tokens: 8000, messages: [{role:'user', content: p}] });
 }
 function parseJSON(text){
   let t = String(text||'').replace(/```json|```/g,'').trim();
@@ -680,7 +695,7 @@ function render(r){
   )).join('');
 
   const comps = (r.competitors&&r.competitors.length) ? r.competitors.map(c=>(
-    '<div class="comp-item"><span class="km">'+(isFinite(c.km)? '~'+Number(c.km).toFixed(1)+' กม.':'')+'</span><b>'+esc(c.name)+'</b><div class="d">'+esc(c.detail||'')+'</div></div>'
+    '<div class="comp-item"><span class="km">'+((isFinite(c.km)&&Number(c.km)>0)? '~'+Number(c.km).toFixed(1)+' กม.':'')+'</span><b>'+esc(c.name)+'</b><div class="d">'+esc(c.detail||'')+'</div></div>'
   )).join('') : '<div class="muted">ไม่พบคู่แข่ง format ใหญ่ในรัศมี — ต้องยืนยันภาคสนาม</div>';
 
   const rents = (r.rent&&r.rent.length) ? r.rent.map(x=>(
@@ -774,7 +789,7 @@ function render(r){
 
 /* ========== history ========== */
 function loadHist(){ try{ return JSON.parse(store.get(HIST_KEY) || '[]'); }catch(e){ return []; } }
-function saveHist(h){ store.set(HIST_KEY, JSON.stringify(h.slice(0,20))); }
+function saveHist(h){ store.set(HIST_KEY, JSON.stringify(h.slice(0,50))); }
 function renderHist(){
   const h = loadHist();
   $('histPanel').style.display = h.length ? 'block' : 'none';
@@ -783,7 +798,7 @@ function renderHist(){
     '<tr><th>ทำเล</th><th>A%</th><th>B%</th><th>เกรด</th><th>ห่าง LP/RD</th><th></th></tr>' +
     h.map((x,i)=>{
       const c = x._calc || {};
-      return '<tr><td><span class="hist-name" data-i="'+i+'">'+esc(x.area||'-')+'</span></td>'+
+      return '<tr><td><span class="hist-name" data-i="'+i+'">'+esc(x.area||'-')+'</span><div class="why">'+fmtDate(x._ts)+'</div></td>'+
         '<td class="sc a">'+ (c.lpPct??'-') +'</td><td class="sc b">'+ (c.rdPct??'-') +'</td>'+
         '<td>'+esc(c.grade||x.grade||'-')+'</td>'+
         '<td>'+ (c.dLP!=null? c.dLP.toFixed(1):'-') +' / '+ (c.dRD!=null? c.dRD.toFixed(1):'-') +'</td>'+
@@ -798,6 +813,42 @@ $('histTable').addEventListener('click', e=>{
   if(del !== null){ h.splice(Number(del),1); saveHist(h); renderHist(); }
 });
 $('btnClearHist').addEventListener('click', ()=>{ if(confirm('ล้างประวัติการสแกนทั้งหมด?')){ store.del(HIST_KEY); renderHist(); } });
+function fmtDate(ts){
+  if(!ts) return '';
+  try{ return new Date(ts).toLocaleString('th-TH',{day:'numeric',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'})+' น.'; }
+  catch(e){ return ''; }
+}
+$('btnExportHist').addEventListener('click', ()=>{
+  const h = loadHist();
+  if(!h.length){ alert('ยังไม่มีประวัติให้สำรอง'); return; }
+  const blob = new Blob([JSON.stringify(h)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const d = new Date(), pad = n => String(n).padStart(2,'0');
+  a.download = 'jj3-scans-'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+$('btnImportHist').addEventListener('click', ()=> $('fileImportHist').click());
+$('fileImportHist').addEventListener('change', e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const rd = new FileReader();
+  rd.onload = ()=>{
+    try{
+      const inc = JSON.parse(rd.result);
+      if(!Array.isArray(inc)) throw new Error('รูปแบบไฟล์ไม่ถูกต้อง');
+      const cur = loadHist();
+      const seen = new Set(cur.map(x=>x._ts));
+      let added = 0;
+      inc.forEach(x=>{ if(x && x.area && !seen.has(x._ts)){ cur.push(x); added++; } });
+      cur.sort((a,b)=>(b._ts||0)-(a._ts||0));
+      saveHist(cur); renderHist();
+      alert('นำเข้าแล้ว '+added+' รายการ — รวมทั้งหมด '+Math.min(cur.length,50)+' รายการ');
+    }catch(err){ alert('นำเข้าไม่สำเร็จ: '+(err.message||err)); }
+    e.target.value = '';
+  };
+  rd.readAsText(f);
+});
 
 /* ========== main ========== */
 $('btnSettings').addEventListener('click', ()=> $('settingsBox').classList.toggle('open'));
@@ -813,8 +864,18 @@ $('btnScan').addEventListener('click', async ()=>{
   setLoading(true);
   let raw = '';
   try{
-    raw = await callClaude(buildPrompt(q));
-    const r = parseJSON(raw);
+    let out = await callClaude(buildPrompt(q));
+    raw = out.text;
+    let r;
+    try{
+      if(out.stop === 'max_tokens') throw new Error('truncated');
+      r = parseJSON(raw);
+    }catch(firstErr){
+      $('loadingMsg').textContent = 'ผลรอบแรกไม่สมบูรณ์ — กำลังเรียบเรียงใหม่อัตโนมัติ…';
+      const out2 = await repairTruncated(raw);
+      raw = out2.text;
+      r = parseJSON(raw);
+    }
     r._q = q; r._ts = Date.now();
     render(r);
     const h = loadHist(); h.unshift(r); saveHist(h); renderHist();
