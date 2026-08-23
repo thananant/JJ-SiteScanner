@@ -357,6 +357,16 @@
           <input id="inGKey" type="password" placeholder="AIza..." autocomplete="off">
         </div>
       </div>
+      <div class="grid2">
+        <div>
+          <label>ค้นหาร้านเพิ่มเอง — พิมพ์ชื่อแล้วดึงข้อมูลจาก Google ตรงๆ</label>
+          <input id="qSearchName" placeholder="เช่น ลัคกี้ สุกี้ อ่อนนุช" autocomplete="off">
+        </div>
+        <div style="display:flex;align-items:flex-end">
+          <button class="qbtn alt" id="btnQSearchAdd" style="width:100%">ค้นหา &amp; ดึงข้อมูล</button>
+        </div>
+      </div>
+      <div id="qSearchRes"></div>
       <label style="margin-top:10px"><input type="checkbox" id="qBuffetOnly" style="width:auto;margin-right:8px">แสดงเฉพาะสายบุฟเฟต์ / ชาบู / หมูกระทะ / ปิ้งย่าง</label>
       <div class="hint">
         • ปุ่ม AI: ใช้ Anthropic key เดิม ไปกวาดรีวิว Google Maps + บทความ หาร้านที่คนพูดว่า "คิวยาว คิวเยอะ รอนาน คนเยอะ" ทั่ว กทม.+ปริมณฑล (~1–2 นาที)<br>
@@ -393,9 +403,21 @@
       <div id="qList"></div>
       <button class="settings-toggle" id="btnQClear">ล้างข้อมูลร้านคิวยาวทั้งหมด</button>
     </section>
+
+    <section class="panel">
+      <h2><span class="dot"></span>ร้านของเรา — จริงใจหมูกระทะ 2 สาขา</h2>
+      <div class="qbtnrow">
+        <button class="qbtn" id="btnOwnFetch">ดึงรีวิวจาก Google ทั้ง 2 สาขา + เปรียบเทียบ</button>
+        <button class="qbtn alt" id="btnOwnAnalyze" style="display:none">วิเคราะห์เสียงลูกค้า 2 สาขาด้วย AI</button>
+      </div>
+      <div class="hint">ดึงคะแนน/จำนวนรีวิว/ข้อความรีวิวเด่นของสาขาลาดพร้าววังหินและรัชดา มาวางเทียบกันตรงๆ (ใช้ Google key — API ให้ข้อความรีวิวเด่นสูงสุด 5 รายการ/สาขา) แล้วให้ AI ถอดบทเรียนไปออกแบบสาขา 3</div>
+      <div class="err" id="ownErr"></div>
+      <div id="ownOut"></div>
+      <div id="ownAiOut" class="verdict" style="display:none;white-space:pre-wrap;margin-top:10px"></div>
+    </section>
   </div>
 
-  <footer>JJ Site Scanner v3.0 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v3.1 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -1524,7 +1546,8 @@ async function qFetchAI(){
 }
 
 /* ---------- โหมด Google Places: สแกนสดรายโซน ---------- */
-async function gplacesSearch(q, lat, lng, gk){
+async function gplacesSearch(q, lat, lng, gk, radius){
+  radius = radius || 5000;
   const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
     method:'POST',
     headers:{
@@ -1533,7 +1556,7 @@ async function gplacesSearch(q, lat, lng, gk){
       'X-Goog-FieldMask':'places.id,places.displayName,places.location,places.rating,places.userRatingCount,places.formattedAddress,places.googleMapsUri,places.primaryTypeDisplayName'
     },
     body: JSON.stringify({ textQuery:q, languageCode:'th', regionCode:'TH', maxResultCount:20,
-      locationBias:{circle:{center:{latitude:lat, longitude:lng}, radius:5000}} })
+      locationBias:{circle:{center:{latitude:lat, longitude:lng}, radius:radius}} })
   });
   if(!res.ok){
     let m=''; try{ const j=await res.json(); m=(j.error&&j.error.message)||''; }catch(e){}
@@ -1610,6 +1633,136 @@ async function qSweepAll(){
   }
 }
 
+/* ---------- ค้นหาร้านเพิ่มเอง ---------- */
+function nearestZone(lat, lng){
+  let best = null, bd = 1e9;
+  Q_ZONES.forEach(z=>{ const d = haversine(lat, lng, z[1], z[2]); if(d < bd){ bd = d; best = z[0]; } });
+  return bd <= 7 ? best : 'นอกโซนสแกน';
+}
+let qSearchFound = [];
+async function qSearchPlaces(){
+  const gk = qGetKey();
+  if(!gk){ $('qErr').textContent = 'ค้นหาตรงต้องมี Google Maps API key (ช่องด้านบน)'; $('qErr').style.display='block'; return; }
+  const q = $('qSearchName').value.trim();
+  if(!q){ $('qSearchRes').innerHTML = '<div class="muted">พิมพ์ชื่อร้านก่อน</div>'; return; }
+  $('qErr').style.display = 'none';
+  const btn = $('btnQSearchAdd'); btn.disabled = true; const t0 = btn.textContent; btn.textContent = 'กำลังค้น…';
+  try{
+    const places = await gplacesSearch(q, 13.78, 100.55, gk, 50000);
+    qSearchFound = places.slice(0, 6).map(pl=>({
+      pid: pl.id||'', name: (pl.displayName&&pl.displayName.text)||'',
+      lat: pl.location&&pl.location.latitude, lng: pl.location&&pl.location.longitude,
+      addr: pl.formattedAddress||'', type: (pl.primaryTypeDisplayName&&pl.primaryTypeDisplayName.text)||'',
+      rating: pl.rating||'', reviews: pl.userRatingCount||'', url: pl.googleMapsUri||''
+    })).filter(x=>x.name && isFinite(x.lat));
+    if(!qSearchFound.length){ $('qSearchRes').innerHTML = '<div class="muted">ไม่พบร้านตามชื่อนี้ — ลองพิมพ์พร้อมย่าน เช่น "ชื่อร้าน บางนา"</div>'; return; }
+    $('qSearchRes').innerHTML = qSearchFound.map((x,i)=>(
+      '<div class="qrow"><span class="rv">'+(x.reviews? Number(x.reviews).toLocaleString()+' รีวิว':'')+(x.rating? ' • '+x.rating+'★':'')+'</span>'+
+      '<b>'+esc(x.name)+'</b><div class="d">'+esc(x.addr)+'</div>'+
+      '<div class="qact"><button class="qmini" data-addi="'+i+'">+ เพิ่มเข้าชุดข้อมูล</button></div></div>'
+    )).join('');
+    $('qSearchRes').querySelectorAll('[data-addi]').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const x = qSearchFound[Number(b.getAttribute('data-addi'))];
+        if(!x) return;
+        const item = { pid:x.pid, name:x.name, lat:x.lat, lng:x.lng,
+          zone: nearestZone(x.lat, x.lng), type:x.type,
+          queue_evidence:'เพิ่มเองจากการค้นหา', rating:x.rating, reviews:x.reviews, url:x.url, src:'search' };
+        const d = loadQData();
+        const n = mergeQItems(d.items, [item]);
+        d.updated = Date.now();
+        saveQData(d); redrawQMarkers();
+        cloudPushQ([item]).catch(()=>{});
+        b.textContent = n ? '✓ เพิ่มแล้ว ('+item.zone+')' : '✓ มีอยู่แล้ว — อัปเดตยอดให้';
+        b.disabled = true;
+      });
+    });
+  }catch(err){
+    $('qErr').textContent = 'ค้นหาไม่สำเร็จ: '+(err.message||err); $('qErr').style.display = 'block';
+  }finally{ btn.disabled = false; btn.textContent = t0; }
+}
+
+/* ---------- ร้านของเรา: จริงใจ 2 สาขา ---------- */
+const OWN_KEY = 'jj3_own_v1';
+async function fetchOwnBranch(gk, br){
+  const places = await gplacesSearch('จริงใจหมูกระทะ', br.lat, br.lng, gk, 3000);
+  const pl = places.find(p=>((p.displayName&&p.displayName.text)||'').indexOf('จริงใจ') > -1) || places[0];
+  if(!pl || !pl.id) throw new Error('หาสาขา '+br.label+' ใน Google ไม่เจอ');
+  const det = await gplaceDetails(pl.id, gk);
+  return {
+    label: br.label,
+    name: (pl.displayName&&pl.displayName.text)||('จริงใจหมูกระทะ '+br.label),
+    rating: det.rating || pl.rating || '',
+    reviews: det.userRatingCount || pl.userRatingCount || '',
+    url: pl.googleMapsUri || '',
+    rv: (det.reviews||[]).slice(0,5).map(r=>({
+      r:r.rating||'', t:r.relativePublishTimeDescription||'', p:r.publishTime||'',
+      x:(r.text&&r.text.text)||(r.originalText&&r.originalText.text)||'',
+      a:(r.authorAttribution&&r.authorAttribution.displayName)||''
+    }))
+  };
+}
+function ownYearLine(b){
+  const yr = {};
+  (b.rv||[]).forEach(r=>{ if(r.p){ const y = new Date(r.p).getFullYear()+543; if(!yr[y]) yr[y]={c:0,s:0}; yr[y].c++; yr[y].s += (Number(r.r)||0); } });
+  const ys = Object.keys(yr).sort((a,b2)=>Number(b2)-Number(a));
+  return ys.length ? ys.map(y=>'พ.ศ. '+y+' ×'+yr[y].c+' ('+(yr[y].s/yr[y].c).toFixed(1)+'★)').join(' · ') : '-';
+}
+function renderOwn(own){
+  const cell = b => {
+    const old0 = (function(){ let m=null; (b.rv||[]).forEach(r=>{ if(r.p){ const t=Date.parse(r.p); if(isFinite(t)&&(m===null||t<m)) m=t; } }); return m; })();
+    return '<div class="stat"><div class="lb">'+esc(b.label)+'</div>'+
+      '<div class="vl"><b>'+esc(b.rating||'-')+'★</b> จาก <b>'+(b.reviews? Number(b.reviews).toLocaleString():'-')+'</b> รีวิว</div>'+
+      '<div class="d">รีวิวเก่าสุดที่เห็น: '+(old0? '~'+fmtMonthYear(old0):'-')+'</div>'+
+      '<div class="d">กระจายปีรีวิวเด่น: '+esc(ownYearLine(b))+'</div>'+
+      (b.url? '<div class="d"><a target="_blank" rel="noopener" style="color:var(--modelB)" href="'+esc(b.url)+'">เปิดใน Google Maps</a></div>':'')+
+      '</div>';
+  };
+  const rvs = b => (b.rv||[]).map(r=>(
+    '<div class="qrv-item"><b>'+esc(r.r)+'★</b> · '+esc(r.t||'')+'<br>'+esc(r.x||'')+'<div class="d">— '+esc(r.a||'ผู้ใช้ Google')+'</div></div>'
+  )).join('') || '<div class="d">ไม่มีข้อความรีวิวจาก API</div>';
+  $('ownOut').innerHTML =
+    '<div class="duo">'+cell(own.lp)+cell(own.rd)+'</div>'+
+    '<div class="sec-label">รีวิวเด่น — ลาดพร้าววังหิน</div>'+rvs(own.lp)+
+    '<div class="sec-label">รีวิวเด่น — รัชดา</div>'+rvs(own.rd)+
+    '<div class="muted">ดึงเมื่อ '+fmtDate(own.t)+' • ข้อมูลชุดนี้เก็บในเครื่องนี้ (กดดึงใหม่ได้ตลอด)</div>';
+  $('btnOwnAnalyze').style.display = 'inline-block';
+}
+async function ownFetch(){
+  const gk = qGetKey();
+  $('ownErr').style.display = 'none';
+  if(!gk){ $('ownErr').textContent = 'ต้องมี Google Maps API key (ช่องด้านบนของหน้านี้)'; $('ownErr').style.display='block'; return; }
+  const btn = $('btnOwnFetch'); btn.disabled = true; const t0 = btn.textContent; btn.textContent = 'กำลังดึง…';
+  try{
+    const lp = await fetchOwnBranch(gk, {label:'ลาดพร้าววังหิน', lat:BRANCHES.LP.lat, lng:BRANCHES.LP.lng});
+    const rd = await fetchOwnBranch(gk, {label:'รัชดา', lat:BRANCHES.RD.lat, lng:BRANCHES.RD.lng});
+    const own = {t:Date.now(), lp, rd};
+    store.set(OWN_KEY, JSON.stringify(own));
+    renderOwn(own);
+    $('ownAiOut').style.display = 'none';
+  }catch(err){
+    $('ownErr').textContent = 'ดึงข้อมูลไม่สำเร็จ: '+(err.message||err); $('ownErr').style.display = 'block';
+  }finally{ btn.disabled = false; btn.textContent = t0; }
+}
+async function ownAnalyze(){
+  let own = null;
+  try{ own = JSON.parse(store.get(OWN_KEY)||'null'); }catch(e){}
+  if(!own){ $('ownErr').textContent = 'ยังไม่มีข้อมูล — กดดึงรีวิวก่อน'; $('ownErr').style.display='block'; return; }
+  const btn = $('btnOwnAnalyze'); btn.disabled = true; const t0 = btn.textContent; btn.textContent = 'กำลังวิเคราะห์…';
+  $('ownErr').style.display = 'none';
+  try{
+    const mk = b => b.label+': '+(b.rating||'-')+'★ จาก '+(b.reviews||'-')+' รีวิว\nรีวิวเด่น:\n'
+      + (b.rv||[]).map(r=>'- ('+(r.r||'?')+'★ '+(r.t||'')+') '+String(r.x||'').replace(/\s+/g,' ').slice(0,260)).join('\n');
+    const p = 'คุณคือที่ปรึกษาของร้าน "จริงใจหมูกระทะ" (บุฟเฟต์หมูกระทะ+ชาบูในโต๊ะเดียว 239/329+ชุดน้ำ 59 เปิดถึง 02:00) สาขา 1 ลาดพร้าววังหิน = โมเดล A ถนนย่านหมู่บ้าน ~4 ลบ./เดือน, สาขา 2 รัชดา = โมเดล B เมืองคอนโด+ดึก 7.5 ลบ.เดือนแรก กำลังจะเปิดสาขา 3\n\nรีวิวจริงจาก Google ของสองสาขาเรา:\n\n[สาขา 1] '+mk(own.lp)+'\n\n[สาขา 2] '+mk(own.rd)+'\n\nวิเคราะห์เป็นภาษาไทย กระชับ เป็นหัวข้อ:\n1) แต่ละสาขา: ด้านดีที่ลูกค้าชม / ด้านไม่ดีที่ติ / pain point\n2) สองสาขาต่างกันตรงไหน และสะท้อนความต่างโมเดล A (ย่านบ้าน) กับ B (เมือง+ดึก) อย่างไร\n3) เรื่องที่ควรแก้ให้จบก่อนเปิดสาขา 3\n4) สเปค/มาตรฐานที่สาขา 3 ควรตั้งจากเสียงลูกค้าเราเอง\nอิงเฉพาะรีวิวที่ให้ (มีเพียงรีวิวเด่น 5 รายการ/สาขา — ให้ระบุข้อจำกัดนี้ท้ายบทวิเคราะห์ด้วย) ห้ามกุข้อมูล';
+    const out = await apiCall({ model: MODEL_NAME, max_tokens: 3000, messages: [{role:'user', content: p}] });
+    $('ownAiOut').textContent = out.text.trim();
+    $('ownAiOut').style.display = 'block';
+    $('ownAiOut').scrollIntoView({behavior:'smooth', block:'start'});
+  }catch(err){
+    $('ownErr').textContent = 'วิเคราะห์ไม่สำเร็จ: '+(err.message||err); $('ownErr').style.display = 'block';
+  }finally{ btn.disabled = false; btn.textContent = t0; }
+}
+
 /* ---------- ปุ่ม/อีเวนต์หน้า 2 ---------- */
 async function runQFetch(btn, fn){
   $('qErr').style.display='none';
@@ -1641,6 +1794,10 @@ $('tabScan').addEventListener('click', ()=>switchTab('scan'));
 $('tabQueue').addEventListener('click', ()=>switchTab('queue'));
 $('btnQAi').addEventListener('click', ()=> runQFetch($('btnQAi'), qFetchAI));
 $('btnQSweep').addEventListener('click', qSweepAll);
+$('btnQSearchAdd').addEventListener('click', qSearchPlaces);
+$('inGKey') && $('qSearchName').addEventListener('keydown', e=>{ if(e.key==='Enter') qSearchPlaces(); });
+$('btnOwnFetch').addEventListener('click', ownFetch);
+$('btnOwnAnalyze').addEventListener('click', ownAnalyze);
 $('btnQGoogle').addEventListener('click', ()=> runQFetch($('btnQGoogle'), qFetchGoogle));
 $('qBuffetOnly').addEventListener('change', redrawQMarkers);
 $('btnQAnalyze').addEventListener('click', async ()=>{
@@ -1704,6 +1861,7 @@ $('btnSbSync').addEventListener('click', ()=>{
   $('qZone').innerHTML = Q_ZONES.map((z,i)=>'<option value="'+i+'">'+esc(z[0])+'</option>').join('');
   bindViewChips();
   bindTierChips();
+  try{ const own = JSON.parse(store.get(OWN_KEY)||'null'); if(own && own.lp) renderOwn(own); }catch(e){}
   $('qMaxRating').addEventListener('change', ()=>{ qFilter.maxR = Number($('qMaxRating').value)||0; redrawQMarkers(); });
   attachSugg('inSubdistrict','sgSub','sub');
   attachSugg('inDistrict','sgDist','dist');
