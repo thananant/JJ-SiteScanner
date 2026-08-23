@@ -365,6 +365,8 @@
         • ข้อมูลทั้งสองทางถูกรวมเข้าชุดเดียว จำไว้ในเครื่อง แตะหมุด/รายการเพื่อดูรายละเอียดและเปิดใน Google Maps
       </div>
       <div class="err" id="qErr"></div>
+      <div class="qf-label">จัดกลุ่มรายการ</div>
+      <div id="qViewChips"></div>
       <div class="qf-label">กรองโซน — แตะเลือกได้หลายโซนพร้อมกัน</div>
       <div id="qZoneChips"></div>
       <div class="qf-label">กรองระดับหมุด</div>
@@ -393,7 +395,7 @@
     </section>
   </div>
 
-  <footer>JJ Site Scanner v2.9 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v3.0 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -1151,6 +1153,52 @@ function renderZoneChips(allItems){
     });
   });
 }
+let qView = 'zone';
+function bindViewChips(){
+  $('qViewChips').innerHTML =
+    '<span class="fchip on" data-view="zone">รายโซน</span>'+
+    '<span class="fchip" data-view="brand">รายแบรนด์ (รวมสาขาชื่อเดียวกัน)</span>';
+  $('qViewChips').querySelectorAll('[data-view]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      qView = el.getAttribute('data-view');
+      $('qViewChips').querySelectorAll('.fchip').forEach(x=>x.classList.toggle('on', x === el));
+      redrawQMarkers();
+    });
+  });
+}
+function brandKey(name){
+  let s = String(name||'').trim().replace(/\(.*?\)/g, ' ');
+  s = s.split(/\s+สาขา/)[0];                 // ตัดตั้งแต่คำว่า "สาขา"
+  return s.replace(/\s+/g, ' ').trim();
+}
+function buildBrands(items){
+  const g = {};
+  items.forEach(it=>{ const k = brandKey(it.name); if(!g[k]) g[k] = []; g[k].push(it); });
+  // รวม key ที่ขึ้นต้นด้วยแบรนด์เดียวกัน (เช่น "สุกี้ตี๋น้อย" กับ "สุกี้ตี๋น้อย ศรีนครินทร์")
+  const keys = Object.keys(g).sort((a,b)=>a.length-b.length);
+  const canonList = [], keyMap = {};
+  keys.forEach(k=>{
+    let t = k;
+    for(const c of canonList){
+      if(c.length >= 5 && k.indexOf(c) === 0 && (k.length === c.length || k[c.length] === ' ')){ t = c; break; }
+    }
+    if(t === k) canonList.push(k);
+    keyMap[k] = t;
+  });
+  const merged = {};
+  Object.keys(g).forEach(k=>{
+    const t = keyMap[k];
+    if(!merged[t]) merged[t] = [];
+    merged[t] = merged[t].concat(g[k]);
+  });
+  return Object.keys(merged).map(name=>{
+    const arr = merged[name].slice().sort((a,b)=>(Number(b.reviews)||0)-(Number(a.reviews)||0));
+    const total = arr.reduce((t,x)=>t+(Number(x.reviews)||0), 0);
+    const rs = arr.map(x=>Number(x.rating)||0).filter(x=>x>0);
+    const avg = rs.length ? rs.reduce((t,x)=>t+x,0)/rs.length : 0;
+    return {name, items:arr, total, avg, n:arr.length};
+  }).sort((a,b)=>b.total-a.total);
+}
 function bindTierChips(){
   $('qTierChips').innerHTML =
     '<span class="fchip on" data-tier="r"><i class="tdot" style="background:#e5484d"></i>&ge;1,000 รีวิว</span>'+
@@ -1300,15 +1348,25 @@ function renderQList(items, mks){
       '<div class="qrev" data-rvpanel="'+k+'" style="display:none"></div>'+
     '</div>';
   };
-  const gz = {};
-  items.forEach(it=>{ const z = it.zone||'ไม่ระบุโซน'; if(!gz[z]) gz[z] = []; gz[z].push(it); });
-  const zsum = z => gz[z].reduce((t,x)=>t+(Number(x.reviews)||0), 0);
-  const zones = Object.keys(gz).sort((a,b)=>zsum(b)-zsum(a));
-  $('qList').innerHTML = zones.map(z=>{
-    const arr = gz[z].slice().sort((a,b)=>(Number(b.reviews)||0)-(Number(a.reviews)||0));
-    return '<div class="qzone-head">'+esc(z)+' <span style="color:var(--ash);font-family:Sarabun;font-size:12.5px;font-weight:normal">'+arr.length+' ร้าน • รวม '+zsum(z).toLocaleString()+' รีวิว</span></div>'
-      + arr.map(rowHtml).join('');
-  }).join('');
+  const sub = t => ' <span style="color:var(--ash);font-family:Sarabun;font-size:12.5px;font-weight:normal">'+t+'</span>';
+  if(qView === 'brand'){
+    const groups = buildBrands(items);
+    $('qList').innerHTML = groups.map(gr=>(
+      '<div class="qzone-head">'+esc(gr.name)+sub(
+        gr.n+' สาขาในเรดาร์ • รวม '+gr.total.toLocaleString()+' รีวิว'+(gr.avg? ' • เฉลี่ย '+gr.avg.toFixed(1)+'★':'')
+      )+'</div>' + gr.items.map(rowHtml).join('')
+    )).join('');
+  } else {
+    const gz = {};
+    items.forEach(it=>{ const z = it.zone||'ไม่ระบุโซน'; if(!gz[z]) gz[z] = []; gz[z].push(it); });
+    const zsum = z => gz[z].reduce((t,x)=>t+(Number(x.reviews)||0), 0);
+    const zones = Object.keys(gz).sort((a,b)=>zsum(b)-zsum(a));
+    $('qList').innerHTML = zones.map(z=>{
+      const arr = gz[z].slice().sort((a,b)=>(Number(b.reviews)||0)-(Number(a.reviews)||0));
+      return '<div class="qzone-head">'+esc(z)+sub(arr.length+' ร้าน • รวม '+zsum(z).toLocaleString()+' รีวิว')+'</div>'
+        + arr.map(rowHtml).join('');
+    }).join('');
+  }
   $('qList').querySelectorAll('.qrow').forEach(el=>{
     el.addEventListener('click', e=>{
       if(e.target.closest('.qmini') || e.target.closest('.qrev')) return;
@@ -1597,7 +1655,11 @@ $('btnQAnalyze').addEventListener('click', async ()=>{
       if(it.deep){ s += ' | ดี['+((it.deep.pros||[]).slice(0,3).join('; '))+'] แย่/pain['+((it.deep.cons||[]).concat(it.deep.pain||[]).slice(0,4).join('; '))+']'; }
       return s;
     }).join('\n');
-    const p = 'คุณคือนักวิเคราะห์ธุรกิจร้านอาหารของ "จริงใจหมูกระทะ" (บุฟเฟต์หมูกระทะ+ชาบูในโต๊ะเดียว 239/329+ชุดน้ำ 59 เปิด 11:00-02:00 มี 2 สาขา: ลาดพร้าววังหิน ~4 ลบ./เดือน และรัชดา 7.5 ลบ.เดือนแรก กำลังหาทำเลสาขา 3 แบบ 350-500 ตรม. จอด 30+ คัน เพดานเช่า 150-200K)\n\nข้อมูลร้านคิวยาวที่รวบรวมจาก Google Maps ('+items.length+' ร้าน) รูปแบบ: ชื่อ | โซน | หมวด | รีวิว | หลักฐานคิว | เสียงลูกค้า\n'+lines+'\n\nวิเคราะห์เป็นภาษาไทย กระชับ เป็นหัวข้อ:\n1) จุดร่วมของร้านคิวยาวชุดนี้ (หมวดไหนครอง ราคา ช่วงเวลา รูปแบบร้าน)\n2) จัดอันดับโซนตามความหนาแน่นของ demand จากข้อมูลนี้\n3) ช่องว่างของ "หมูกระทะ+ชาบูในโต๊ะเดียว format ใหญ่": โซนที่คิวยาวเยอะแต่ยังไม่มีคู่แข่งสายตรง\n4) บทเรียนจากเสียงลูกค้า: อะไรทำให้คนยอมต่อคิว อะไรที่คนบ่น — จริงใจควรทำ/เลี่ยงอะไร\n5) ข้อเสนอ 3 ข้อที่ลงมือได้จริงสำหรับสาขา 3\nอิงเฉพาะข้อมูลที่ให้ ถ้าข้อมูลบางโซนน้อยให้บอกว่ายังสแกนไม่พอ ห้ามกุตัวเลข';
+    const topBrands = buildBrands(items).filter(g=>g.n >= 2).slice(0, 15);
+    const brandLine = topBrands.length
+      ? ('แบรนด์ที่มีหลายสาขาในชุดข้อมูล: '+topBrands.map(g=>g.name+' ×'+g.n+' สาขา ('+g.total.toLocaleString()+' รีวิว'+(g.avg?(' เฉลี่ย '+g.avg.toFixed(1)+'★'):'')+')').join(' | ')+'\n\n')
+      : '';
+    const p = 'คุณคือนักวิเคราะห์ธุรกิจร้านอาหารของ "จริงใจหมูกระทะ" (บุฟเฟต์หมูกระทะ+ชาบูในโต๊ะเดียว 239/329+ชุดน้ำ 59 เปิด 11:00-02:00 มี 2 สาขา: ลาดพร้าววังหิน ~4 ลบ./เดือน และรัชดา 7.5 ลบ.เดือนแรก กำลังหาทำเลสาขา 3 แบบ 350-500 ตรม. จอด 30+ คัน เพดานเช่า 150-200K)\n\n'+brandLine+'ข้อมูลร้านคิวยาวที่รวบรวมจาก Google Maps ('+items.length+' ร้าน) รูปแบบ: ชื่อ | โซน | หมวด | รีวิว | หลักฐานคิว | เสียงลูกค้า\n'+lines+'\n\nวิเคราะห์เป็นภาษาไทย กระชับ เป็นหัวข้อ:\n1) จุดร่วมของร้านคิวยาวชุดนี้ (หมวดไหนครอง ราคา ช่วงเวลา รูปแบบร้าน)\n2) จัดอันดับโซนตามความหนาแน่นของ demand จากข้อมูลนี้\n3) ช่องว่างของ "หมูกระทะ+ชาบูในโต๊ะเดียว format ใหญ่": โซนที่คิวยาวเยอะแต่ยังไม่มีคู่แข่งสายตรง\n4) บทเรียนจากเสียงลูกค้า: อะไรทำให้คนยอมต่อคิว อะไรที่คนบ่น — จริงใจควรทำ/เลี่ยงอะไร\n5) ข้อเสนอ 3 ข้อที่ลงมือได้จริงสำหรับสาขา 3\nอิงเฉพาะข้อมูลที่ให้ ถ้าข้อมูลบางโซนน้อยให้บอกว่ายังสแกนไม่พอ ห้ามกุตัวเลข';
     const out = await apiCall({ model: MODEL_NAME, max_tokens: 4000, messages: [{role:'user', content: p}] });
     $('qAnalysisOut').textContent = out.text.trim();
     $('qAnalysisOut').style.display = 'block';
@@ -1640,6 +1702,7 @@ $('btnSbSync').addEventListener('click', ()=>{
   updateSyncBadge();
   syncFromCloud(false);
   $('qZone').innerHTML = Q_ZONES.map((z,i)=>'<option value="'+i+'">'+esc(z[0])+'</option>').join('');
+  bindViewChips();
   bindTierChips();
   $('qMaxRating').addEventListener('change', ()=>{ qFilter.maxR = Number($('qMaxRating').value)||0; redrawQMarkers(); });
   attachSugg('inSubdistrict','sgSub','sub');
