@@ -459,7 +459,7 @@
     </section>
   </div>
 
-  <footer>JJ Site Scanner v4.9 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v5.0 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -1482,7 +1482,7 @@ function loadGoogleMap(gk){
     redrawQMarkers();
   };
   const s = document.createElement('script');
-  s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(gk) + '&callback=__jjGInit&language=th&region=TH&libraries=visualization';
+  s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(gk) + '&callback=__jjGInit&language=th&region=TH';
   s.onerror = function(){ $('qErr').textContent = 'โหลด Google Maps ไม่สำเร็จ — เช็ค key/การเปิดใช้ Maps JavaScript API (ใช้แผนที่สำรองไปก่อน)'; $('qErr').style.display='block'; initLeafletMap(); };
   document.head.appendChild(s);
 }
@@ -2148,6 +2148,67 @@ async function qDeepAll(){
 }
 
 /* ---------- ฮีทแมพความหนาแน่นรีวิว ---------- */
+function makeGHeat(map){
+  // Google ปิด HeatmapLayer ถาวรแล้ว (พ.ค. 2569) — วาดเองด้วย canvas overlay สไตล์เดียวกับ leaflet.heat
+  function JJHeat(){ this.pts = []; this.setMap(map); }
+  JJHeat.prototype = new google.maps.OverlayView();
+  JJHeat.prototype.onAdd = function(){
+    this.canvas = document.createElement('canvas');
+    this.canvas.style.position = 'absolute';
+    this.canvas.style.pointerEvents = 'none';
+    this.getPanes().overlayLayer.appendChild(this.canvas);
+  };
+  JJHeat.prototype.onRemove = function(){
+    if(this.canvas && this.canvas.parentNode) this.canvas.parentNode.removeChild(this.canvas);
+    this.canvas = null;
+  };
+  JJHeat.prototype.setData = function(pts){ this.pts = pts; this.draw(); };
+  JJHeat.prototype.draw = function(){
+    const proj = this.getProjection();
+    if(!proj || !this.canvas || !map.getBounds()) return;
+    const div = map.getDiv();
+    const w = div.offsetWidth, h = div.offsetHeight;
+    const b = map.getBounds();
+    const sw = proj.fromLatLngToDivPixel(b.getSouthWest());
+    const ne = proj.fromLatLngToDivPixel(b.getNorthEast());
+    this.canvas.style.left = sw.x + 'px';
+    this.canvas.style.top = ne.y + 'px';
+    this.canvas.width = w; this.canvas.height = h;
+    const ctx = this.canvas.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+    const R = 40;
+    this.pts.forEach(p=>{
+      const px = proj.fromLatLngToDivPixel(new google.maps.LatLng(p.lat, p.lng));
+      const x = px.x - sw.x, y = px.y - ne.y;
+      if(x < -R || y < -R || x > w + R || y > h + R) return;
+      const a = Math.max(0.1, Math.min(1, p.w));
+      const g = ctx.createRadialGradient(x, y, 0, x, y, R);
+      g.addColorStop(0, 'rgba(0,0,0,' + a + ')');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
+    });
+    if(!JJHeat._lut){
+      const lc = document.createElement('canvas'); lc.width = 256; lc.height = 1;
+      const lx = lc.getContext('2d');
+      const lg = lx.createLinearGradient(0, 0, 256, 0);
+      lg.addColorStop(0.00, 'rgba(30,60,255,0)');
+      lg.addColorStop(0.20, 'rgba(30,90,255,0.55)');
+      lg.addColorStop(0.45, 'rgba(0,200,120,0.62)');
+      lg.addColorStop(0.70, 'rgba(255,210,0,0.72)');
+      lg.addColorStop(1.00, 'rgba(229,40,40,0.82)');
+      lx.fillStyle = lg; lx.fillRect(0, 0, 256, 1);
+      JJHeat._lut = lx.getImageData(0, 0, 256, 1).data;
+    }
+    const img = ctx.getImageData(0, 0, w, h), d = img.data, lut = JJHeat._lut;
+    for(let i = 0; i < d.length; i += 4){
+      const a2 = d[i + 3];
+      if(a2){ const j = a2 * 4; d[i] = lut[j]; d[i+1] = lut[j+1]; d[i+2] = lut[j+2]; d[i+3] = lut[j+3]; }
+    }
+    ctx.putImageData(img, 0, 0);
+  };
+  return new JJHeat();
+}
 let qHeatLayer = null;
 function clearHeat(){
   if(!qHeatLayer || !qMap) { qHeatLayer = null; return; }
@@ -2175,18 +2236,9 @@ function drawHeat(items){
         {radius: 300 + 1400*w(it)/maxW, stroke:false, fillColor:'#ff5a3c', fillOpacity:.15}).addTo(qMap));
     }
   } else {
-    if(window.google && google.maps.visualization && google.maps.visualization.HeatmapLayer){
-      qHeatLayer = new google.maps.visualization.HeatmapLayer({
-        data: pts.map(it=>({location: new google.maps.LatLng(Number(it.lat), Number(it.lng)), weight: w(it)})),
-        radius: 45, opacity: .7, map: qMap
-      });
-    } else {
-      qHeatLayer = pts.map(it=>new google.maps.Circle({
-        center:{lat:Number(it.lat), lng:Number(it.lng)},
-        radius: 300 + 1400*w(it)/maxW, strokeWeight: 0,
-        fillColor:'#ff5a3c', fillOpacity:.15, map:qMap
-      }));
-    }
+    const ov = makeGHeat(qMap);
+    ov.setData(pts.map(it=>({lat: Number(it.lat), lng: Number(it.lng), w: w(it)/maxW})));
+    qHeatLayer = ov;
   }
 }
 
