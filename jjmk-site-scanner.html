@@ -221,6 +221,10 @@
   .qrev{margin-top:8px;border-top:1px dashed var(--line);padding-top:6px}
   .qmini.done-deep{background:linear-gradient(135deg,#e5484d,#d9a036);border-color:transparent;color:#fff;font-weight:500}
   .qmini.done-rv{border-color:#58a66e;color:#8fd3a5}
+  .qtag{display:inline-block;font-family:'IBM Plex Sans Thai';font-size:11px;padding:2px 8px;border-radius:99px;
+    border:1px solid var(--gold);color:var(--gold-soft);vertical-align:2px;margin-left:6px}
+  .qtag.hot{background:linear-gradient(135deg,var(--emberA),#b8811a);border-color:transparent;color:#fff}
+  .qtag.dim{border-color:var(--line);color:var(--ash)}
   .qrv-item{background:var(--charcoal);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:6px 0;font-size:13.5px}
   .tdot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:7px;vertical-align:-1px;border:1px solid rgba(255,255,255,.25)}
   .qf-label{font-size:12.5px;color:var(--ash);margin:10px 0 4px;font-family:'IBM Plex Sans Thai'}
@@ -412,6 +416,8 @@
       <div id="qCatChips"></div>
       <div class="qf-label">สถานะการสืบประวัติ (AI)</div>
       <div id="qDeepChips"></div>
+      <div class="qf-label">รีวิวพูดถึงคิว/รอนาน/คนเยอะ — แยกตามปีจากวันที่รีวิวจริง (นับเฉพาะร้านที่ดึงรีวิวแล้ว)</div>
+      <div id="qQmChips"></div>
       <div class="grid2">
         <div>
           <label>แสดงเฉพาะคะแนนรีวิวต่ำกว่า</label>
@@ -460,7 +466,7 @@
     </section>
   </div>
 
-  <footer>JJ Site Scanner v5.3 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v5.4 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -1278,7 +1284,18 @@ function qTier(it){
   return {c:'#8a8580', t:'&lt;200 รีวิว/ไม่ทราบยอด', k:'x'}; // หมุดเทา
 }
 const qFilter = { zones: new Set(), tiers: new Set(['r','y','g','x']), maxR: 0, text: '',
-  cats: new Set(['mk','sb','bf','other']), deep: 'all', sort: 'rv' };
+  cats: new Set(['mk','sb','bf','other']), deep: 'all', sort: 'rv', qm: 'all' };
+const QMENTION_RE = /(คิว|ต่อคิว|รอคิว|จองคิว|รอนาน|รอเป็นชั่วโมง|รอ\s*\d+\s*(นาที|ชม\.?|ชั่วโมง)|คนเยอะ|คนแน่น|แน่นมาก|เต็มตลอด|ที่นั่งเต็ม|queue|long\s*wait)/i;
+function qMentionYears(it){
+  const ys = new Set();
+  (it.rv||[]).forEach(r=>{
+    if(r.p && r.x && QMENTION_RE.test(r.x)){
+      const t = Date.parse(r.p);
+      if(isFinite(t)) ys.add(new Date(t).getFullYear() + 543);
+    }
+  });
+  return ys;
+}
 function qCat(it){
   const s = ((it.name||'')+' '+(it.type||'')).toLowerCase();
   if(/หมูกระทะ|ปิ้งย่าง|ย่างเกาหลี|yakiniku|grill|bbq|เนื้อย่าง/.test(s)) return 'mk';
@@ -1295,6 +1312,12 @@ function qApplyFilter(items){
     if(!qFilter.cats.has(qCat(it))) return false;
     if(qFilter.deep === 'done' && !(it.deep && it.deep.pros)) return false;
     if(qFilter.deep === 'todo' && (it.deep && it.deep.pros)) return false;
+    if(qFilter.qm !== 'all'){
+      const ys = qMentionYears(it);
+      if(qFilter.qm === 'both' && !(ys.has(2568) && ys.has(2569))) return false;
+      if(qFilter.qm === 'y69' && !ys.has(2569)) return false;
+      if(qFilter.qm === 'y68' && !ys.has(2568)) return false;
+    }
     if(qFilter.zones.size && !qFilter.zones.has(it.zone||'ไม่ระบุโซน')) return false;
     const t = qTier(it);
     if(t && !qFilter.tiers.has(t.k)) return false;
@@ -1386,6 +1409,17 @@ function bindDeepChips(){
     el.addEventListener('click', ()=>{
       qFilter.deep = el.getAttribute('data-deepf');
       bindDeepChips();
+      redrawQMarkers();
+    });
+  });
+}
+function bindQmChips(){
+  const defs = [['all','ทั้งหมด'],['both','🔥 คิวต่อเนื่อง 68→69'],['y69','พูดถึงคิวปี 69'],['y68','พูดถึงคิวปี 68']];
+  $('qQmChips').innerHTML = defs.map(d=>'<span class="fchip'+(qFilter.qm===d[0]?' on':'')+'" data-qm="'+d[0]+'">'+d[1]+'</span>').join('');
+  $('qQmChips').querySelectorAll('[data-qm]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      qFilter.qm = el.getAttribute('data-qm');
+      bindQmChips();
       redrawQMarkers();
     });
   });
@@ -1582,6 +1616,13 @@ function renderQList(items, mks){
     return '<div class="qrow" data-k="'+k+'" data-lat="'+it.lat+'" data-lng="'+it.lng+'">'+
       '<span class="rv">'+(it.reviews? Number(it.reviews).toLocaleString()+' รีวิว':'')+(it.rating? ' • '+it.rating+'★':'')+'</span>'+
       '<i class="tdot" style="background:'+((qTier(it)||{c:'#57504a'}).c)+'"></i><b>'+esc(it.name)+'</b>'+
+      (function(){
+        const ys = qMentionYears(it);
+        if(ys.has(2568) && ys.has(2569)) return ' <span class="qtag hot">คิวต่อเนื่อง 68–69</span>';
+        if(ys.has(2569)) return ' <span class="qtag">คิวปี 69</span>';
+        if(ys.has(2568)) return ' <span class="qtag dim">คิวปี 68</span>';
+        return '';
+      })()+
       '<div class="d">'+esc(it.zone||'')+(it.type?' • '+esc(it.type):'')+' — '+esc(it.queue_evidence||'')+'</div>'+
       '<div class="qact"><button class="qmini'+((it.rv&&it.rv.length)?' done-rv':'')+'" data-rvbtn="'+k+'">'+((it.rv&&it.rv.length)?'✓ อ่านรีวิว':'อ่านรีวิว')+'</button>'+
       '<button class="qmini'+((it.deep&&it.deep.pros)?' done-deep':'')+'" data-deepbtn="'+k+'">'+((it.deep&&it.deep.pros)?'✓ สืบแล้ว — ดูผล':'สืบประวัติ (AI)')+'</button>'+
@@ -2312,11 +2353,13 @@ $('btnQResetFilter').addEventListener('click', ()=>{
   $('qMaxRating').value = '0';
   qFilter.cats = new Set(['mk','sb','bf','other']);
   qFilter.deep = 'all';
+  qFilter.qm = 'all';
   qFilter.sort = 'rv';
   $('qSort').value = 'rv';
   bindTierChips();
   bindCatChips();
   bindDeepChips();
+  bindQmChips();
   redrawQMarkers();
 });
 $('inGKey') && $('qSearchName').addEventListener('keydown', e=>{ if(e.key==='Enter') qSearchPlaces(); });
@@ -2345,13 +2388,15 @@ $('btnQAnalyze').addEventListener('click', async ()=>{
       let s = (it.name||'')+' | '+(it.zone||'')+' | '+(it.type||'-')+' | '+(it.reviews||'?')+' รีวิว '+(it.rating||'')+'★ | '+(it.queue_evidence||'');
       if(it.rv && it.rv.length){ s += ' | เสียงลูกค้า: '+it.rv.slice(0,2).map(r=>String(r.x||'').replace(/\s+/g,' ').slice(0,110)).join(' / '); }
       if(it.deep){ s += ' | ดี['+((it.deep.pros||[]).slice(0,3).join('; '))+'] แย่/pain['+((it.deep.cons||[]).concat(it.deep.pain||[]).slice(0,4).join('; '))+']'; }
+      const qy = Array.from(qMentionYears(it)).sort();
+      if(qy.length) s += ' | รีวิวพูดถึงคิวปี พ.ศ.: '+qy.join(',');
       return s;
     }).join('\n');
     const topBrands = buildBrands(items).filter(g=>g.n >= 2).slice(0, 15);
     const brandLine = topBrands.length
       ? ('แบรนด์ที่มีหลายสาขาในชุดข้อมูล: '+topBrands.map(g=>g.name+' ×'+g.n+' สาขา ('+g.total.toLocaleString()+' รีวิว'+(g.avg?(' เฉลี่ย '+g.avg.toFixed(1)+'★'):'')+')').join(' | ')+'\n\n')
       : '';
-    const p = 'คุณคือนักวิเคราะห์ธุรกิจร้านอาหารของ "จริงใจหมูกระทะ" (บุฟเฟต์หมูกระทะ+ชาบูในโต๊ะเดียว 239/329+ชุดน้ำ 59 เปิด 11:00-02:00 มี 2 สาขา: ลาดพร้าววังหิน ~4 ลบ./เดือน และรัชดา 7.5 ลบ.เดือนแรก กำลังหาทำเลสาขา 3 แบบ 350-500 ตรม. จอด 30+ คัน เพดานเช่า 150-200K)\n\n'+brandLine+'ข้อมูลร้านคิวยาวที่รวบรวมจาก Google Maps ('+items.length+' ร้าน) รูปแบบ: ชื่อ | โซน | หมวด | รีวิว | หลักฐานคิว | เสียงลูกค้า\n'+lines+'\n\nวิเคราะห์เป็นภาษาไทย กระชับ เป็นหัวข้อ:\n1) จุดร่วมของร้านคิวยาวชุดนี้ (หมวดไหนครอง ราคา ช่วงเวลา รูปแบบร้าน)\n2) จัดอันดับโซนตามความหนาแน่นของ demand จากข้อมูลนี้\n3) ช่องว่างของ "หมูกระทะ+ชาบูในโต๊ะเดียว format ใหญ่": โซนที่คิวยาวเยอะแต่ยังไม่มีคู่แข่งสายตรง\n4) บทเรียนจากเสียงลูกค้า: อะไรทำให้คนยอมต่อคิว อะไรที่คนบ่น — จริงใจควรทำ/เลี่ยงอะไร\n5) ข้อเสนอ 3 ข้อที่ลงมือได้จริงสำหรับสาขา 3\nอิงเฉพาะข้อมูลที่ให้ ถ้าข้อมูลบางโซนน้อยให้บอกว่ายังสแกนไม่พอ ห้ามกุตัวเลข';
+    const p = 'คุณคือนักวิเคราะห์ธุรกิจร้านอาหารของ "จริงใจหมูกระทะ" (บุฟเฟต์หมูกระทะ+ชาบูในโต๊ะเดียว 239/329+ชุดน้ำ 59 เปิด 11:00-02:00 มี 2 สาขา: ลาดพร้าววังหิน ~4 ลบ./เดือน และรัชดา 7.5 ลบ.เดือนแรก กำลังหาทำเลสาขา 3 แบบ 350-500 ตรม. จอด 30+ คัน เพดานเช่า 150-200K)\n\n'+brandLine+'ข้อมูลร้านคิวยาวที่รวบรวมจาก Google Maps ('+items.length+' ร้าน) รูปแบบ: ชื่อ | โซน | หมวด | รีวิว | หลักฐานคิว | เสียงลูกค้า\n'+lines+'\n\nวิเคราะห์เป็นภาษาไทย กระชับ เป็นหัวข้อ:\n1) จุดร่วมของร้านคิวยาวชุดนี้ (หมวดไหนครอง ราคา ช่วงเวลา รูปแบบร้าน)\n2) จัดอันดับโซนตามความหนาแน่นของ demand จากข้อมูลนี้\n3) ช่องว่างของ "หมูกระทะ+ชาบูในโต๊ะเดียว format ใหญ่": โซนที่คิวยาวเยอะแต่ยังไม่มีคู่แข่งสายตรง\n4) บทเรียนจากเสียงลูกค้า: อะไรทำให้คนยอมต่อคิว อะไรที่คนบ่น — จริงใจควรทำ/เลี่ยงอะไร\n5) ข้อเสนอ 3 ข้อที่ลงมือได้จริงสำหรับสาขา 3\n6) วิเคราะห์กลุ่ม "รีวิวพูดถึงคิวปี พ.ศ." ที่ให้มา: ร้านที่มีทั้งปี 2568 และ 2569 = คิวยาวต่อเนื่องของจริง, มีเฉพาะ 2569 = ดาวรุ่งเพิ่งแรง, มีเฉพาะ 2568 = อาจกำลังแผ่ว — สรุปว่ากลุ่มคิวต่อเนื่องกระจุกโซนไหน และมีนัยยะอะไรต่อการเลือกทำเลสาขา 3\nอิงเฉพาะข้อมูลที่ให้ ถ้าข้อมูลบางโซนน้อยให้บอกว่ายังสแกนไม่พอ ห้ามกุตัวเลข';
     const out = await apiCall({ model: MODEL_NAME, max_tokens: 4000, messages: [{role:'user', content: p}] });
     $('qAnalysisOut').textContent = out.text.trim();
     $('qAnalysisOut').style.display = 'block';
@@ -2405,6 +2450,7 @@ $('btnQClear').addEventListener('click', ()=>{
   bindTierChips();
   bindCatChips();
   bindDeepChips();
+  bindQmChips();
   try{ const own = JSON.parse(store.get(OWN_KEY)||'null'); if(own && own.lp) renderOwn(own); }catch(e){}
   (async ()=>{
     try{
