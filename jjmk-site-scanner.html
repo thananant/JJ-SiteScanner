@@ -331,6 +331,7 @@
       </div>
       <div class="hint" id="sbStatus" style="margin-top:14px"></div>
       <div class="hint">คลาวด์ (Supabase โปรเจกต์ jjmk-stock) ฝังค่าไว้ในระบบเรียบร้อย — ซิงก์อัตโนมัติทุกเครื่อง ไม่ต้องตั้งค่าใดๆ</div>
+      <button class="settings-toggle" id="btnPullCloud">ดึงข้อมูลทั้งหมดจากคลาวด์ใหม่เดี๋ยวนี้ (ใช้เมื่อข้อมูลในเครื่องหาย)</button>
     </div>
     <div class="err" id="errBox"></div>
   </section>
@@ -459,7 +460,7 @@
     </section>
   </div>
 
-  <footer>JJ Site Scanner v5.0 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v5.2 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -1077,6 +1078,21 @@ $('fileImportHist').addEventListener('change', e=>{
 /* ========== main ========== */
 $('btnSettings').addEventListener('click', ()=> $('settingsBox').classList.toggle('open'));
 $('inGKey').addEventListener('change', qGetKey); // วาง Google key ปุ๊บ: บันทึก + ส่งขึ้นคลาวด์ + สลับแผนที่เป็น Google ทันที
+$('inApiKey').addEventListener('change', ()=>{
+  const v = $('inApiKey').value.trim();
+  if(v) store.set(KEY_KEY, v); // วางปุ๊บเกาะเครื่องถาวร ไม่ระเหยตอนรีเฟรชอีก
+});
+$('btnPullCloud').addEventListener('click', async ()=>{
+  const b = $('btnPullCloud'); b.disabled = true; const t0 = b.textContent; b.textContent = 'กำลังดึงจากคลาวด์…';
+  try{
+    await syncFromCloud(true);
+    if(qMap) redrawQMarkers();
+    b.textContent = '✓ ดึงแล้ว — ร้านคิวยาวในเครื่องตอนนี้ '+loadQData().items.length+' ร้าน';
+    setTimeout(()=>{ b.textContent = t0; b.disabled = false; }, 4000);
+  }catch(e){
+    b.textContent = t0; b.disabled = false;
+  }
+});
 $('btnScan').addEventListener('click', async ()=>{
   const q = {
     dist: $('inDistrict').value.trim(), sub: $('inSubdistrict').value.trim(),
@@ -1184,8 +1200,8 @@ function updateSyncBadge(){
   const el = $('sbStatus'); if(!el) return;
   if(!sbCfg()){ el.textContent = 'ยังไม่เชื่อมคลาวด์ — ประวัติเก็บเฉพาะเครื่องนี้ (50 รายการล่าสุด)'; return; }
   el.textContent = (SYNC_STATE==='ok')
-    ? ('เชื่อม Supabase แล้ว — ประวัติทั้งหมด '+loadHist().length+' รายการ + ร้านคิวยาว '+loadQData().items.length+' ร้าน ซิงก์ทุกเครื่อง')
-    : (SYNC_STATE==='off' ? 'กำลังเชื่อมคลาวด์…' : 'ซิงก์ล่าสุดไม่สำเร็จ: '+SYNC_STATE.replace('err:',''));
+    ? ('เชื่อมคลาวด์แล้ว ✓ ร้านคิวยาวบนคลาวด์ '+(window.__qCloudN!=null? window.__qCloudN : '-')+' ร้าน • ในเครื่อง '+loadQData().items.length+' ร้าน • ประวัติสแกน '+loadHist().length+' รายการ')
+    : (SYNC_STATE==='off' ? 'กำลังเชื่อมคลาวด์…' : 'ซิงก์ล่าสุดไม่สำเร็จ: '+SYNC_STATE.replace('err:','')+' — ข้อมูลใหม่จะค้างอยู่แค่เครื่องนี้จนกว่าจะซิงก์ผ่าน');
 }
 async function syncFromCloud(showErr){
   const c = sbCfg(); if(!c){ updateSyncBadge(); return; }
@@ -1198,6 +1214,7 @@ async function syncFromCloud(showErr){
     saveHist(merged); renderHist();
     for(const r of toPush){ try{ await cloudPushScan(r); }catch(e){} }
     const qc = await cloudPullQ();
+    window.__qCloudN = qc.length;
     const d = loadQData();
     const localByKey = {};
     d.items.forEach(it=>{ localByKey[qKeyOf(it)] = it; });
@@ -1476,6 +1493,7 @@ function loadGoogleMap(gk){
     qEngine = 'g';
     qMap = new google.maps.Map(document.getElementById('qmap'), {
       center:{lat:13.78,lng:100.55}, zoom:10,
+      gestureHandling:'greedy', // สกอร์ลเมาส์ซูมได้เลย ไม่ต้องกด Ctrl
       mapTypeControl:false, streetViewControl:false, fullscreenControl:true
     });
     qInfoW = new google.maps.InfoWindow();
