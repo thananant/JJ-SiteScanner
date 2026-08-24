@@ -319,9 +319,9 @@
     <button class="settings-toggle" id="btnSettings">ตั้งค่าขั้นสูง — คีย์/คลาวด์ (ปกติไม่ต้องยุ่ง ระบบดึงจากคลาวด์ให้แล้ว)</button>
     <div class="settings" id="settingsBox">
       <label>Anthropic API key (ตัวสำรอง — ปกติระบบเรียกผ่านคลาวด์ ไม่ใช้ช่องนี้)</label>
-      <input id="inApiKey" type="password" placeholder="sk-ant-..." autocomplete="off">
+      <input id="inApiKey" type="password" placeholder="sk-ant-..." autocomplete="new-password">
       <label>Google Maps API key (ใส่ครั้งแรกครั้งเดียวจากเครื่องไหนก็ได้ — ระบบแจกให้ทุกเครื่องผ่านคลาวด์)</label>
-      <input id="inGKey" type="password" placeholder="AIza..." autocomplete="off">
+      <input id="inGKey" type="password" placeholder="AIza..." autocomplete="new-password">
       <div class="hint">
         <b>ติดตั้งโหมดคลาวด์แล้ว?</b> ช่องนี้เว้นว่างได้เลย — แอพเรียก AI ผ่าน Supabase โดย key เก็บเป็น Secret ฝั่งเซิร์ฟเวอร์ ทุกเครื่องใช้ได้ทันทีไม่ต้องตั้งค่า<br>
         <b>วิธีเอา key (กรณีใช้แบบใส่ key ในเครื่อง):</b> เข้า platform.claude.com → สมัคร/ล็อกอิน Console (คนละบัญชีกับแอป Claude — แพ็กเกจ Pro/Max ใช้แทนไม่ได้) → เมนู Billing เติมเครดิต → เมนู API Keys → Create Key → คัดลอกทั้งเส้น (ขึ้นต้น sk-ant-) มาวางช่องบนแล้วสแกนได้เลย<br>
@@ -459,7 +459,7 @@
     </section>
   </div>
 
-  <footer>JJ Site Scanner v4.8 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v4.9 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -2328,10 +2328,17 @@ $('btnQClear').addEventListener('click', ()=>{
   try{ const own = JSON.parse(store.get(OWN_KEY)||'null'); if(own && own.lp) renderOwn(own); }catch(e){}
   (async ()=>{
     try{
-      if(!(store.get(GKEY_KEY)||'').trim()){
-        const rows = await sbFetch('jj3_config?key=eq.gmaps&select=value', {method:'GET'});
-        const v = rows && rows[0] && rows[0].value;
-        if(v){ store.set(GKEY_KEY, v); $('inGKey').value = v; upgradeMapToGoogle(); }
+      const local = (store.get(GKEY_KEY)||'').trim();
+      const rows = await sbFetch('jj3_config?key=eq.gmaps&select=value', {method:'GET'});
+      const cloud = ((rows && rows[0] && rows[0].value) || '').trim();
+      if(cloud && cloud !== local){
+        // คลาวด์คือแหล่งความจริง — เปลี่ยน key จากเครื่องไหน ทุกเครื่องตามอัตโนมัติ
+        store.set(GKEY_KEY, cloud);
+        $('inGKey').value = cloud;
+        upgradeMapToGoogle();
+      } else if(!cloud && local){
+        // เครื่องนี้มี key ติดมาจากเวอร์ชันก่อน — ช่วย seed ขึ้นคลาวด์ให้ทั้งทีมเลย
+        cloudPushConfig('gmaps', local);
       }
     }catch(e){}
   })();
