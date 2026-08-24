@@ -374,6 +374,7 @@
         <span><i style="background:#6e8fb2"></i>ทำเลที่สแกน</span>
       </div>
       <label><input type="checkbox" id="qHeatOn" style="width:auto;margin-right:8px">ฮีทแมพความหนาแน่นรีวิว — จุดร้อน = รีวิวสะสมเยอะ (ตามตัวกรองปัจจุบัน)</label>
+      <div class="muted" id="qEngineNote" style="margin-top:4px"></div>
       <div class="qbtnrow">
         <button class="qbtn" id="btnQSweep">สแกนทุกโซนอัตโนมัติ (20 โซน)</button>
         <button class="qbtn alt" id="btnQGoogle">สแกนเฉพาะโซนที่เลือก</button>
@@ -458,7 +459,7 @@
     </section>
   </div>
 
-  <footer>JJ Site Scanner v4.7 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v4.8 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -1075,6 +1076,7 @@ $('fileImportHist').addEventListener('change', e=>{
 
 /* ========== main ========== */
 $('btnSettings').addEventListener('click', ()=> $('settingsBox').classList.toggle('open'));
+$('inGKey').addEventListener('change', qGetKey); // วาง Google key ปุ๊บ: บันทึก + ส่งขึ้นคลาวด์ + สลับแผนที่เป็น Google ทันที
 $('btnScan').addEventListener('click', async ()=>{
   const q = {
     dist: $('inDistrict').value.trim(), sub: $('inSubdistrict').value.trim(),
@@ -1463,6 +1465,12 @@ function initLeafletMap(){
   }).addTo(qMap);
   redrawQMarkers();
 }
+window.gm_authFailure = function(){
+  // Google เรียกฟังก์ชันนี้เองเมื่อ key ถูกปฏิเสธ
+  try{ qMap = null; initLeafletMap(); }catch(e){}
+  const n = document.getElementById('qEngineNote');
+  if(n) n.textContent = 'Google ปฏิเสธ key นี้ — เข้า console.cloud.google.com เปิด "Maps JavaScript API" ให้ key และถ้าตั้ง restriction ต้องมี thananant.github.io/* (กลับมาใช้แผนที่พื้นฐานให้ก่อน)';
+};
 function loadGoogleMap(gk){
   window.__jjGInit = function(){
     qEngine = 'g';
@@ -1530,6 +1538,13 @@ function redrawQMarkers(){
   });
   renderQList(items, mks);
   drawHeat(items);
+  const noteEl = $('qEngineNote');
+  if(noteEl){
+    const hasKey = !!((store.get(GKEY_KEY)||'').trim());
+    if(qEngine === 'g') noteEl.textContent = '';
+    else if(!hasKey) noteEl.textContent = 'แผนที่โหมดพื้นฐาน — ยังไม่มี Google key ในเครื่อง/คลาวด์: เปิด "ตั้งค่าขั้นสูง" (แท็บสแกนทำเล) วาง key ครั้งเดียว แผนที่จะสลับเป็น Google ต่อหน้าเลย';
+    else noteEl.textContent = 'มี Google key แล้วแต่ยังเป็นแผนที่พื้นฐาน — ถ้าเพิ่งวาง key รอครู่เดียว / ถ้าค้าง: เปิด Maps JavaScript API ให้ key นี้ และเช็ค referrer thananant.github.io';
+  }
   const hidden = items.length - plotted;
   if(!all.length){
     $('qStatus').textContent = 'ยังไม่มีข้อมูล — กดปุ่มรวบรวมด้านบนได้เลย';
