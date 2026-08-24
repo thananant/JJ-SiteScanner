@@ -469,7 +469,7 @@
     </section>
   </div>
 
-  <footer>JJ Site Scanner v4.2 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v4.3 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -776,7 +776,7 @@ ${JSON_SCHEMA}
 }
 
 /* ========== เรียก Anthropic API ========== */
-const AI_PROXY_URL = SB_DEFAULT_URL + '/functions/v1/jj3-ai-proxy';
+const AI_PROXY_URL = 'https://aikyxvluaiubdidqxwnd.supabase.co/functions/v1/jj3-ai-proxy';
 let PROXY_STATE = ''; // '' = ยังไม่รู้, 'ok' = ใช้ได้, 'off' = ยังไม่ติดตั้ง
 async function apiCall(body){
   if(PROXY_STATE !== 'off'){
@@ -1451,6 +1451,11 @@ function initQueueMap(){
   if(gk){ loadGoogleMap(gk); } else { initLeafletMap(); }
 }
 function initLeafletMap(){
+  if(typeof L === 'undefined'){
+    const el = document.getElementById('qmap');
+    if(el) el.innerHTML = '<div style="padding:24px;color:#a39489">โหลดไลบรารีแผนที่ไม่สำเร็จ (เน็ตสะดุด/ตัวบล็อกโฆษณา) — รีเฟรชหน้าอีกครั้ง</div>';
+    return;
+  }
   qEngine = 'l';
   qMap = L.map('qmap').setView([13.78, 100.55], 10);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
@@ -2324,7 +2329,6 @@ $('btnSbSync').addEventListener('click', ()=>{
       }
     }catch(e){}
   })();
-  switchTab(store.get('jj3_tab') === 'scan' ? 'scan' : 'queue');
   $('qMaxRating').addEventListener('change', ()=>{ qFilter.maxR = Number($('qMaxRating').value)||0; redrawQMarkers(); });
   let qSearchT = null;
   $('qListSearch').addEventListener('input', ()=>{
@@ -2336,6 +2340,8 @@ $('btnSbSync').addEventListener('click', ()=>{
   attachSugg('inProvince','sgProv','prov');
   attachSugg('inZip','sgZip','zip');
   renderHist();
+  try{ switchTab(store.get('jj3_tab') === 'scan' ? 'scan' : 'queue'); }
+  catch(e){ try{ switchTab('scan'); }catch(e2){} }
 })();
 </script>
 </body>
