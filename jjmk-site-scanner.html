@@ -321,7 +321,8 @@
       <label>Anthropic API key</label>
       <input id="inApiKey" type="password" placeholder="sk-ant-..." autocomplete="off">
       <div class="hint">
-        <b>วิธีเอา key (ทำครั้งเดียว):</b> เข้า platform.claude.com → สมัคร/ล็อกอิน Console (คนละบัญชีกับแอป Claude — แพ็กเกจ Pro/Max ใช้แทนไม่ได้) → เมนู Billing เติมเครดิต → เมนู API Keys → Create Key → คัดลอกทั้งเส้น (ขึ้นต้น sk-ant-) มาวางช่องบนแล้วสแกนได้เลย<br>
+        <b>ติดตั้งโหมดคลาวด์แล้ว?</b> ช่องนี้เว้นว่างได้เลย — แอพเรียก AI ผ่าน Supabase โดย key เก็บเป็น Secret ฝั่งเซิร์ฟเวอร์ ทุกเครื่องใช้ได้ทันทีไม่ต้องตั้งค่า<br>
+        <b>วิธีเอา key (กรณีใช้แบบใส่ key ในเครื่อง):</b> เข้า platform.claude.com → สมัคร/ล็อกอิน Console (คนละบัญชีกับแอป Claude — แพ็กเกจ Pro/Max ใช้แทนไม่ได้) → เมนู Billing เติมเครดิต → เมนู API Keys → Create Key → คัดลอกทั้งเส้น (ขึ้นต้น sk-ant-) มาวางช่องบนแล้วสแกนได้เลย<br>
         • เปิดผ่านหน้า Claude โดยตรง — ไม่ต้องใส่ key ระบบจัดการให้<br>
         • เปิดบน GitHub Pages / เปิดไฟล์เอง — ต้องใส่ key เสมอ (key เก็บในเครื่องนี้เท่านั้น และส่งตรงหา Anthropic ที่เดียว)<br>
         • ค่าใช้จ่ายต่อสแกน: ค้นเว็บสูงสุด 10 ครั้ง + โทเคน รวมราวหลักบาทถึง ~10 บาท ใช้เวลา ~1–2 นาที
@@ -387,7 +388,7 @@
           <select id="qZone"></select>
         </div>
         <div>
-          <label>Google Maps API key (ไม่บังคับ — ใส่แล้วแผนที่สลับเป็น Google Map + สแกนสดได้)</label>
+          <label>Google Maps API key (ใส่จากเครื่องไหนก็ได้ครั้งเดียว — ระบบแจกให้ทุกเครื่องผ่านคลาวด์อัตโนมัติ)</label>
           <input id="inGKey" type="password" placeholder="AIza..." autocomplete="off">
         </div>
       </div>
@@ -449,6 +450,7 @@
         <button class="qbtn alt" id="btnQDeepAll">สืบอัตโนมัติ — รีวิว ≥500 (สายบุฟเฟต์)</button>
         <button class="qbtn alt" id="btnQExport">ดาวน์โหลดข้อมูล (.json)</button>
       </div>
+      <div class="muted" style="margin-top:4px">โหมดคลาวด์ (ไม่ต้องเปิดคอม): ติดตั้งครั้งเดียวตามไฟล์ jj3-deep-worker.ts + รัน SQL ล่าสุด แล้ว Supabase จะสืบร้านรีวิว ≥500 เองทุก 5 นาที — เปิดแอพเมื่อไหร่ผลซิงก์ลงมาอัตโนมัติ</div>
       <div id="qAnalysisOut" class="verdict" style="display:none;white-space:pre-wrap"></div>
       <div id="qList"></div>
       <button class="settings-toggle" id="btnQClear">ล้างข้อมูลร้านคิวยาวทั้งหมด</button>
@@ -467,7 +469,7 @@
     </section>
   </div>
 
-  <footer>JJ Site Scanner v4.0 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v4.2 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -774,7 +776,41 @@ ${JSON_SCHEMA}
 }
 
 /* ========== เรียก Anthropic API ========== */
+const AI_PROXY_URL = SB_DEFAULT_URL + '/functions/v1/jj3-ai-proxy';
+let PROXY_STATE = ''; // '' = ยังไม่รู้, 'ok' = ใช้ได้, 'off' = ยังไม่ติดตั้ง
 async function apiCall(body){
+  if(PROXY_STATE !== 'off'){
+    try{
+      const pc = new AbortController();
+      const pt = setTimeout(()=>pc.abort(), 240000);
+      const pr = await fetch(AI_PROXY_URL, { method:'POST', signal: pc.signal,
+        headers: {'Content-Type':'application/json', 'x-jj3-key':'jj3-batch-2569'},
+        body: JSON.stringify(body) });
+      clearTimeout(pt);
+      if(pr.status === 404 || pr.status === 403){
+        PROXY_STATE = 'off'; // โหมดคลาวด์ยังไม่ติดตั้ง — ใช้ key ในเครื่องตามเดิม
+      } else {
+        let pd = null; try{ pd = await pr.json(); }catch(e){}
+        if(!pr.ok){
+          let pm = (pd && pd.error && (pd.error.message || pd.error)) || ('HTTP ' + pr.status);
+          pm = (typeof pm === 'string') ? pm : JSON.stringify(pm).slice(0, 200);
+          if(/credit|billing|balance/i.test(pm)) pm = 'เครดิต API ไม่พอ — เติมที่ platform.claude.com เมนู Billing (บัญชี Console)';
+          else if(pr.status === 401 || /invalid x-api-key/i.test(pm)) pm = 'ANTHROPIC_API_KEY ใน Supabase Secrets ไม่ถูกต้อง — แก้ที่ Edge Functions › Secrets';
+          throw new Error(pm);
+        }
+        PROXY_STATE = 'ok';
+        return {
+          text: ((pd && pd.content) || []).map(b => b.type === 'text' ? b.text : '').filter(Boolean).join('\n'),
+          stop: (pd && pd.stop_reason) || ''
+        };
+      }
+    }catch(err){
+      if(PROXY_STATE === 'ok') throw err; // proxy เคยใช้ได้ = ปัญหาจริง อย่ากลืน
+      const m = String((err && err.message) || err);
+      if(/เครดิต|Secrets|เพดาน/.test(m)) throw err; // ตอบจาก proxy จริง — ส่งต่อเลย
+      PROXY_STATE = 'off'; // ต่อไม่ติด/ไม่มีฟังก์ชัน — ถอยไปทางตรง
+    }
+  }
   const key = ($('inApiKey').value || '').trim();
   if(key && key.indexOf('sk-ant-') !== 0){
     throw new Error('รูปแบบ key ไม่ถูกต้อง — key จริงจาก platform.claude.com จะขึ้นต้นด้วย sk-ant- (อย่าใช้รหัสผ่าน/บัญชีแอป Claude)');
@@ -1802,9 +1838,19 @@ async function qScanZone(z, gk){
   }
   return found;
 }
+async function cloudPushConfig(k, v){
+  try{
+    await sbFetch('jj3_config?on_conflict=key', {method:'POST',
+      headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body: JSON.stringify([{key:k, value:v}])});
+  }catch(e){}
+}
 function qGetKey(){
   const gk = ($('inGKey').value || '').trim();
-  if(gk) store.set(GKEY_KEY, gk);
+  if(gk){
+    if(gk !== (store.get(GKEY_KEY)||'').trim()) cloudPushConfig('gmaps', gk);
+    store.set(GKEY_KEY, gk);
+  }
   return gk;
 }
 async function qFetchGoogle(){
@@ -2269,6 +2315,15 @@ $('btnSbSync').addEventListener('click', ()=>{
   bindCatChips();
   bindDeepChips();
   try{ const own = JSON.parse(store.get(OWN_KEY)||'null'); if(own && own.lp) renderOwn(own); }catch(e){}
+  (async ()=>{
+    try{
+      if(!(store.get(GKEY_KEY)||'').trim()){
+        const rows = await sbFetch('jj3_config?key=eq.gmaps&select=value', {method:'GET'});
+        const v = rows && rows[0] && rows[0].value;
+        if(v){ store.set(GKEY_KEY, v); $('inGKey').value = v; }
+      }
+    }catch(e){}
+  })();
   switchTab(store.get('jj3_tab') === 'scan' ? 'scan' : 'queue');
   $('qMaxRating').addEventListener('change', ()=>{ qFilter.maxR = Number($('qMaxRating').value)||0; redrawQMarkers(); });
   let qSearchT = null;
