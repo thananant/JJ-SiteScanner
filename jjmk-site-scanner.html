@@ -369,7 +369,7 @@
         <span><i style="background:#e5484d"></i>&ge;1,000 รีวิว</span>
         <span><i style="background:#ffd23f"></i>500–999</span>
         <span><i style="background:#58a66e"></i>200–499</span>
-        <span style="color:#6b6157">&lt;200 ไม่ปักหมุด (ยังอยู่ในรายการ)</span>
+        <span><i style="background:#8a8580"></i>&lt;200 / ไม่ทราบยอด</span>
         <span><i style="background:#d9a036"></i>สาขาจริงใจ</span>
         <span><i style="background:#6e8fb2"></i>ทำเลที่สแกน</span>
       </div>
@@ -458,7 +458,7 @@
     </section>
   </div>
 
-  <footer>JJ Site Scanner v4.5 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v4.7 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -1256,9 +1256,9 @@ function qTier(it){
   if(n >= 1000) return {c:'#e5484d', t:'&ge;1,000 รีวิว', k:'r'};
   if(n >= 500)  return {c:'#ffd23f', t:'500–999 รีวิว', k:'y'};
   if(n >= 200)  return {c:'#58a66e', t:'200–499 รีวิว', k:'g'};
-  return null; // ต่ำกว่า 200 หรือไม่ทราบ — ไม่ปักหมุด
+  return {c:'#8a8580', t:'&lt;200 รีวิว/ไม่ทราบยอด', k:'x'}; // หมุดเทา
 }
-const qFilter = { zones: new Set(), tiers: new Set(['r','y','g']), maxR: 0, text: '',
+const qFilter = { zones: new Set(), tiers: new Set(['r','y','g','x']), maxR: 0, text: '',
   cats: new Set(['mk','sb','bf','other']), deep: 'all', sort: 'rv' };
 function qCat(it){
   const s = ((it.name||'')+' '+(it.type||'')).toLowerCase();
@@ -1278,8 +1278,7 @@ function qApplyFilter(items){
     if(qFilter.deep === 'todo' && (it.deep && it.deep.pros)) return false;
     if(qFilter.zones.size && !qFilter.zones.has(it.zone||'ไม่ระบุโซน')) return false;
     const t = qTier(it);
-    if(t){ if(!qFilter.tiers.has(t.k)) return false; }
-    else if(qFilter.tiers.size < 3) return false; // เลือกกรองสี = ตัดพวกไม่มีระดับออกด้วย
+    if(t && !qFilter.tiers.has(t.k)) return false;
     if(qFilter.maxR){
       const r = Number(it.rating)||0;
       if(!(r > 0 && r < qFilter.maxR)) return false;
@@ -1393,7 +1392,8 @@ function bindTierChips(){
   $('qTierChips').innerHTML =
     '<span class="fchip on" data-tier="r"><i class="tdot" style="background:#e5484d"></i>&ge;1,000 รีวิว</span>'+
     '<span class="fchip on" data-tier="y"><i class="tdot" style="background:#ffd23f"></i>500–999</span>'+
-    '<span class="fchip on" data-tier="g"><i class="tdot" style="background:#58a66e"></i>200–499</span>';
+    '<span class="fchip on" data-tier="g"><i class="tdot" style="background:#58a66e"></i>200–499</span>'+
+    '<span class="fchip on" data-tier="x"><i class="tdot" style="background:#8a8580"></i>&lt;200 / ไม่ทราบ</span>';
   $('qTierChips').querySelectorAll('[data-tier]').forEach(el=>{
     el.addEventListener('click', ()=>{
       const t = el.getAttribute('data-tier');
@@ -1437,6 +1437,18 @@ function initQueueMap(){
   if(qMap) return;
   const gk = (store.get(GKEY_KEY) || '').trim();
   if(gk){ loadGoogleMap(gk); } else { initLeafletMap(); }
+}
+function upgradeMapToGoogle(){
+  // เรียกเมื่อเพิ่งได้ Google key (จากคลาวด์/จากการวางใน ตั้งค่าขั้นสูง) แต่แผนที่เกิดเป็น Leaflet ไปแล้ว
+  const gk = (store.get(GKEY_KEY) || '').trim();
+  if(!gk || qEngine === 'g') return;
+  try{
+    if(qMap && qEngine === 'l' && qMap.remove) qMap.remove();
+  }catch(e){}
+  qMap = null; qMarkers = []; qHeatLayer = null;
+  const el = document.getElementById('qmap');
+  if(el) el.innerHTML = '';
+  loadGoogleMap(gk);
 }
 function initLeafletMap(){
   if(typeof L === 'undefined'){
@@ -1509,7 +1521,6 @@ function redrawQMarkers(){
   let plotted = 0;
   items.forEach(it=>{
     const tier = qTier(it);
-    if(!tier) return; // ต่ำกว่า 200 รีวิว/ไม่ทราบ — ไม่ปักหมุด
     plotted++;
     const html = '<b>'+esc(it.name)+'</b><br>'+esc(it.zone||'')+(it.type?' • '+esc(it.type):'')+
       (it.rating?'<br>คะแนน '+esc(it.rating)+(it.reviews?' ('+Number(it.reviews).toLocaleString()+' รีวิว — '+tier.t+')':''):'')+
@@ -1527,7 +1538,6 @@ function redrawQMarkers(){
   }else{
     const cut = all.length - items.length;
     $('qStatus').textContent = 'หมุดบนแผนที่ '+plotted+' ร้าน'
-      +(hidden>0?(' • อีก '+hidden+' ร้านต่ำกว่า 200 รีวิว/ไม่ทราบยอด (อยู่ในรายการ)'):'')
       +(cut>0?(' • ตัวกรองตัดออก '+cut+' ร้าน — จุดหายให้กดรีเซ็ตตัวกรอง'):'')
       +' • ทั้งหมด '+all.length+' ร้าน'
       +(loadQData().updated?(' • อัปเดต '+fmtDate(loadQData().updated)):'');
@@ -1841,8 +1851,10 @@ async function cloudPushConfig(k, v){
 function qGetKey(){
   const gk = ($('inGKey').value || '').trim();
   if(gk){
-    if(gk !== (store.get(GKEY_KEY)||'').trim()) cloudPushConfig('gmaps', gk);
+    const changed = gk !== (store.get(GKEY_KEY)||'').trim();
+    if(changed) cloudPushConfig('gmaps', gk);
     store.set(GKEY_KEY, gk);
+    if(changed) upgradeMapToGoogle();
   }
   return gk;
 }
@@ -2200,7 +2212,7 @@ $('btnQResetFilter').addEventListener('click', ()=>{
   $('qListSearch').value = '';
   qFilter.text = '';
   qFilter.zones.clear();
-  qFilter.tiers = new Set(['r','y','g']);
+  qFilter.tiers = new Set(['r','y','g','x']);
   qFilter.maxR = 0;
   $('qMaxRating').value = '0';
   qFilter.cats = new Set(['mk','sb','bf','other']);
@@ -2304,7 +2316,7 @@ $('btnQClear').addEventListener('click', ()=>{
       if(!(store.get(GKEY_KEY)||'').trim()){
         const rows = await sbFetch('jj3_config?key=eq.gmaps&select=value', {method:'GET'});
         const v = rows && rows[0] && rows[0].value;
-        if(v){ store.set(GKEY_KEY, v); $('inGKey').value = v; }
+        if(v){ store.set(GKEY_KEY, v); $('inGKey').value = v; upgradeMapToGoogle(); }
       }
     }catch(e){}
   })();
