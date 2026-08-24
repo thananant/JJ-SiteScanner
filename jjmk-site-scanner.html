@@ -460,7 +460,7 @@
     </section>
   </div>
 
-  <footer>JJ Site Scanner v5.2 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v5.3 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -2094,6 +2094,16 @@ async function deepFetchRetry(it){
   }
   throw last;
 }
+async function proxyAlive(){
+  if(PROXY_STATE === 'ok') return true;
+  if(PROXY_STATE === 'off') return false;
+  try{
+    const r = await fetch(AI_PROXY_URL, {method:'OPTIONS'});
+    if(r.ok) return true;
+    if(r.status === 404){ PROXY_STATE = 'off'; return false; }
+    return true; // 403/อื่นๆ = ฟังก์ชันมีตัวตน
+  }catch(e){ return false; }
+}
 async function qDeepAll(){
   const btn = $('btnQDeepAll');
   if(qDeepRun){ qDeepRun = false; btn.textContent = 'กำลังหยุด…'; return; }
@@ -2103,8 +2113,8 @@ async function qDeepAll(){
       && !(it.deep && it.deep.pros));
   if(!targets.length){ alert('ร้านสายบุฟเฟต์ที่รีวิว ≥500 (ตามตัวกรอง) ถูกสืบครบหมดแล้ว — ร้านต่ำกว่า 500 กดปุ่ม "สืบประวัติ (AI)" รายร้านได้เลย'); return; }
   const ak = ($('inApiKey').value || '').trim();
-  if(!ak){
-    if(!confirm('ยังไม่เห็น Anthropic API key ในตั้งค่า (แท็บสแกนทำเล)\nถ้าเปิดจาก GitHub Pages/ไฟล์ตรง การสืบจะพัง 401 ทุกร้าน — ใส่ key ก่อนดีกว่า\n(กด OK เพื่อฝืนรันต่อ เฉพาะกรณีเปิดผ่านหน้า Claude ที่ไม่ต้องใช้ key)')) return;
+  if(!ak && !(await proxyAlive())){
+    if(!confirm('ยังไม่พบทั้งโหมดคลาวด์ (jj3-ai-proxy) และ Anthropic key ในเครื่อง — การสืบจะพัง 401 ทุกร้าน\nทางแก้: deploy ฟังก์ชัน jj3-ai-proxy + ตั้ง ANTHROPIC_API_KEY ใน Secrets (แนะนำ) หรือใส่ key สำรองที่ "ตั้งค่าขั้นสูง"\n(กด OK เพื่อฝืนรันต่อ เฉพาะกรณีเปิดผ่านหน้า Claude)')) return;
   }
   const mins = Math.ceil(targets.length * 0.4);
   if(!confirm('โหมดสืบอัตโนมัติ: '+targets.length+' ร้าน (สายบุฟเฟต์ รีวิว ≥500 ที่ยังไม่เคยสืบ)\n• ใช้เวลาราว '+mins+'–'+(mins*2)+' นาที — กดแล้วปล่อยทิ้งไว้ได้เลย ระบบรีทรายเองเมื่อสะดุด กันจอดับให้ และบันทึกทีละร้าน\n• ค่า API ประมาณ '+(targets.length*2)+'–'+(targets.length*5)+' บาท (ถ้า key/เครดิตมีปัญหาจะหยุดทันที ไม่เผาเงินต่อ)\n• แนะนำเสียบสายชาร์จ หรือรันบนคอมเปิดแท็บทิ้งไว้\nเริ่มเลยไหม?')) return;
