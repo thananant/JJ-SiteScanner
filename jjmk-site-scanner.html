@@ -316,10 +316,12 @@
 
     <button class="scan-btn" id="btnScan">สแกนทำเลนี้</button>
 
-    <button class="settings-toggle" id="btnSettings">ตั้งค่า API key (สำหรับใช้งานบน GitHub Pages)</button>
+    <button class="settings-toggle" id="btnSettings">ตั้งค่าขั้นสูง — คีย์/คลาวด์ (ปกติไม่ต้องยุ่ง ระบบดึงจากคลาวด์ให้แล้ว)</button>
     <div class="settings" id="settingsBox">
-      <label>Anthropic API key</label>
+      <label>Anthropic API key (ตัวสำรอง — ปกติระบบเรียกผ่านคลาวด์ ไม่ใช้ช่องนี้)</label>
       <input id="inApiKey" type="password" placeholder="sk-ant-..." autocomplete="off">
+      <label>Google Maps API key (ใส่ครั้งแรกครั้งเดียวจากเครื่องไหนก็ได้ — ระบบแจกให้ทุกเครื่องผ่านคลาวด์)</label>
+      <input id="inGKey" type="password" placeholder="AIza..." autocomplete="off">
       <div class="hint">
         <b>ติดตั้งโหมดคลาวด์แล้ว?</b> ช่องนี้เว้นว่างได้เลย — แอพเรียก AI ผ่าน Supabase โดย key เก็บเป็น Secret ฝั่งเซิร์ฟเวอร์ ทุกเครื่องใช้ได้ทันทีไม่ต้องตั้งค่า<br>
         <b>วิธีเอา key (กรณีใช้แบบใส่ key ในเครื่อง):</b> เข้า platform.claude.com → สมัคร/ล็อกอิน Console (คนละบัญชีกับแอป Claude — แพ็กเกจ Pro/Max ใช้แทนไม่ได้) → เมนู Billing เติมเครดิต → เมนู API Keys → Create Key → คัดลอกทั้งเส้น (ขึ้นต้น sk-ant-) มาวางช่องบนแล้วสแกนได้เลย<br>
@@ -327,13 +329,8 @@
         • เปิดบน GitHub Pages / เปิดไฟล์เอง — ต้องใส่ key เสมอ (key เก็บในเครื่องนี้เท่านั้น และส่งตรงหา Anthropic ที่เดียว)<br>
         • ค่าใช้จ่ายต่อสแกน: ค้นเว็บสูงสุด 10 ครั้ง + โทเคน รวมราวหลักบาทถึง ~10 บาท ใช้เวลา ~1–2 นาที
       </div>
-      <label style="margin-top:14px">Supabase URL (เชื่อมคลาวด์ — เก็บประวัติถาวรทั้งหมด ดูได้ทุกเครื่อง)</label>
-      <input id="inSbUrl" placeholder="https://xxxx.supabase.co" autocomplete="off">
-      <label>Supabase anon key</label>
-      <input id="inSbKey" type="password" placeholder="eyJ..." autocomplete="off">
-      <button class="settings-toggle" id="btnSbSync">บันทึก + ซิงก์เดี๋ยวนี้</button>
-      <div class="hint" id="sbStatus"></div>
-      <div class="hint">URL + publishable key ตั้งค่ามาให้ครบแล้ว (โปรเจกต์ jjmk-stock) — ทำครั้งแรกครั้งเดียว: รันไฟล์ jj3-supabase-setup.sql ใน SQL Editor แล้วแอพจะซิงก์อัตโนมัติทุกเครื่องเอง • ช่องนี้แก้เฉพาะตอนย้ายโปรเจกต์ • ห้ามใช้ sb_secret_ ในแอพนี้เด็ดขาด</div>
+      <div class="hint" id="sbStatus" style="margin-top:14px"></div>
+      <div class="hint">คลาวด์ (Supabase โปรเจกต์ jjmk-stock) ฝังค่าไว้ในระบบเรียบร้อย — ซิงก์อัตโนมัติทุกเครื่อง ไม่ต้องตั้งค่าใดๆ</div>
     </div>
     <div class="err" id="errBox"></div>
   </section>
@@ -382,16 +379,8 @@
         <button class="qbtn alt" id="btnQGoogle">สแกนเฉพาะโซนที่เลือก</button>
         <button class="qbtn alt" id="btnQAi">รวบรวมด้วย AI (ใช้ key เดิม)</button>
       </div>
-      <div class="grid2">
-        <div>
-          <label>โซนที่จะสแกนด้วย Google</label>
-          <select id="qZone"></select>
-        </div>
-        <div>
-          <label>Google Maps API key (ใส่จากเครื่องไหนก็ได้ครั้งเดียว — ระบบแจกให้ทุกเครื่องผ่านคลาวด์อัตโนมัติ)</label>
-          <input id="inGKey" type="password" placeholder="AIza..." autocomplete="off">
-        </div>
-      </div>
+      <label>โซนที่จะสแกนด้วยปุ่ม "สแกนเฉพาะโซนที่เลือก"</label>
+      <select id="qZone"></select>
       <div class="grid2">
         <div>
           <label>ค้นหาร้านเพิ่มเอง — พิมพ์ชื่อแล้วดึงข้อมูลจาก Google ตรงๆ</label>
@@ -405,7 +394,7 @@
       <div class="hint">
         • ปุ่ม AI: ใช้ Anthropic key เดิม ไปกวาดรีวิว Google Maps + บทความ หาร้านที่คนพูดว่า "คิวยาว คิวเยอะ รอนาน คนเยอะ" ทั่ว กทม.+ปริมณฑล (~1–2 นาที)<br>
         • ปุ่มสแกนทุกโซน: ไล่ค้นครบ 20 โซนอัตโนมัติใน ~2–3 นาที (~60 ครั้ง/รอบ จากโควตาฟรี ~5,000 ครั้ง/เดือน) กดซ้ำเพื่อหยุดกลางทางได้ — แนะนำรันซ้ำสัปดาห์ละครั้งเพื่อให้ระบบคำนวณอัตรารีวิวเพิ่ม<br>
-        • ปุ่มสแกนเฉพาะโซน: ค้นสดเฉพาะโซนที่เลือกจาก dropdown — ทั้งสองปุ่มต้องมี Google Maps API key<br>
+        • ปุ่มสแกนเฉพาะโซน: ค้นสดเฉพาะโซนที่เลือกจาก dropdown — ใช้ Google key จากคลาวด์อัตโนมัติ (ตั้งครั้งแรกที่ "ตั้งค่าขั้นสูง")<br>
         • ข้อมูลทั้งสองทางถูกรวมเข้าชุดเดียว จำไว้ในเครื่อง แตะหมุด/รายการเพื่อดูรายละเอียดและเปิดใน Google Maps
       </div>
       <div class="err" id="qErr"></div>
@@ -469,7 +458,7 @@
     </section>
   </div>
 
-  <footer>JJ Site Scanner v4.3 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
+  <footer>JJ Site Scanner v4.5 — เครื่องมือภายใน จริงใจหมูกระทะ • เกณฑ์คะแนน 8 มิติตามรายงานวิเคราะห์สาขา 3 (ส.ค. 2569)</footer>
 </div>
 
 <script>
@@ -1130,9 +1119,8 @@ const SB_DEFAULT_KEY = 'sb_publishable_Bn6BMtcjasoPT3RZ_ekyOg_SLWWp-nm';
 const SB_DEFAULT_URL = 'https://aikyxvluaiubdidqxwnd.supabase.co';
 let SYNC_STATE = 'off';
 function sbCfg(){
-  const u = ((store.get(SBURL_KEY)||'').trim() || SB_DEFAULT_URL).replace(/\/+$/,'');
-  const k = (store.get(SBKEY_KEY)||'').trim() || SB_DEFAULT_KEY;
-  return (u && k) ? {u,k} : null;
+  // ค่าฝังเท่านั้น — เลิกอ่านค่าที่เคยเซฟในเครื่อง (กันค่าที่พิมพ์เพี้ยนทับจนซิงก์พัง)
+  return { u: SB_DEFAULT_URL, k: SB_DEFAULT_KEY };
 }
 async function sbFetch(path, opt){
   const c = sbCfg(); if(!c) return null;
@@ -1195,7 +1183,7 @@ function updateSyncBadge(){
   if(!sbCfg()){ el.textContent = 'ยังไม่เชื่อมคลาวด์ — ประวัติเก็บเฉพาะเครื่องนี้ (50 รายการล่าสุด)'; return; }
   el.textContent = (SYNC_STATE==='ok')
     ? ('เชื่อม Supabase แล้ว — ประวัติทั้งหมด '+loadHist().length+' รายการ + ร้านคิวยาว '+loadQData().items.length+' ร้าน ซิงก์ทุกเครื่อง')
-    : (SYNC_STATE==='off' ? 'ตั้งค่าแล้ว — กด "บันทึก + ซิงก์เดี๋ยวนี้" เพื่อเชื่อม' : 'ซิงก์ล่าสุดไม่สำเร็จ: '+SYNC_STATE.replace('err:',''));
+    : (SYNC_STATE==='off' ? 'กำลังเชื่อมคลาวด์…' : 'ซิงก์ล่าสุดไม่สำเร็จ: '+SYNC_STATE.replace('err:',''));
 }
 async function syncFromCloud(showErr){
   const c = sbCfg(); if(!c){ updateSyncBadge(); return; }
@@ -1713,7 +1701,7 @@ async function refetchReviews(k, panel){
   const it = d.items.find(x=>qKeyOf(x)===k);
   if(!it) return;
   const gk = (($('inGKey').value||'').trim()) || ((store.get(GKEY_KEY)||'').trim());
-  if(!gk){ panel.innerHTML = '<div class="d">ดึงรีวิวชุดใหม่ต้องมี Google Maps API key</div>'; return; }
+  if(!gk){ panel.innerHTML = '<div class="d">ดึงรีวิวชุดใหม่ต้องมี Google key — ใส่ที่ "ตั้งค่าขั้นสูง" (แท็บสแกนทำเล)</div>'; return; }
   if(it.rv && it.rv.length){
     it.rvLog = (it.rvLog||[]).concat([{t: Date.now(), rating: it.rating, reviews: it.reviews, rv: it.rv}]).slice(-5);
     it.rv = null;
@@ -1781,7 +1769,7 @@ async function toggleReviews(k, panel){
   if(!it){ panel.innerHTML = '<div class="d">ไม่พบข้อมูลร้าน</div>'; return; }
   if(it.rv && it.rv.length){ panel.innerHTML = rvHtml(it); return; }
   const gk = (($('inGKey').value||'').trim()) || ((store.get(GKEY_KEY)||'').trim());
-  if(!gk){ panel.innerHTML = '<div class="d">การดึงข้อความรีวิวต้องมี Google Maps API key (ช่องด้านบน) — ระหว่างนี้กด "เปิดใน Google Maps" อ่านได้เลย</div>'; return; }
+  if(!gk){ panel.innerHTML = '<div class="d">การดึงข้อความรีวิวต้องมี Google key — ใส่ครั้งเดียวที่ "ตั้งค่าขั้นสูง" (แท็บสแกนทำเล) ระหว่างนี้กด "เปิดใน Google Maps" อ่านได้เลย</div>'; return; }
   panel.innerHTML = '<div class="d">กำลังดึงรีวิว…</div>';
   try{
     await fetchReviewsFor(it, gk);
@@ -1860,7 +1848,7 @@ function qGetKey(){
 }
 async function qFetchGoogle(){
   const gk = qGetKey();
-  if(!gk) throw new Error('ต้องใส่ Google Maps API key ก่อน (ช่องด้านบน) — โหมดนี้ยิง Places API ตรง');
+  if(!gk) throw new Error('ยังไม่มี Google key ในระบบ — ใส่ครั้งเดียวที่ "ตั้งค่าขั้นสูง" (แท็บสแกนทำเล) แล้วทุกเครื่องจะได้รับผ่านคลาวด์เอง');
   const z = Q_ZONES[Number($('qZone').value)];
   $('qStatus').textContent = 'กำลังค้นโซน '+z[0]+'…';
   return qScanZone(z, gk);
@@ -1870,7 +1858,7 @@ async function qSweepAll(){
   const btn = $('btnQSweep');
   if(qSweepRun){ qSweepRun = false; btn.textContent = 'กำลังหยุด…'; return; }
   const gk = qGetKey();
-  if(!gk){ $('qErr').textContent = 'ต้องใส่ Google Maps API key ก่อน — ปุ่มนี้ยิง Places API ครบทุกโซน'; $('qErr').style.display = 'block'; return; }
+  if(!gk){ $('qErr').textContent = 'ยังไม่มี Google key ในระบบ — ใส่ครั้งเดียวที่ "ตั้งค่าขั้นสูง" (แท็บสแกนทำเล)'; $('qErr').style.display = 'block'; return; }
   qSweepRun = true;
   $('qErr').style.display = 'none';
   $('btnQAi').disabled = true; $('btnQGoogle').disabled = true;
@@ -1912,7 +1900,7 @@ function nearestZone(lat, lng){
 let qSearchFound = [];
 async function qSearchPlaces(){
   const gk = qGetKey();
-  if(!gk){ $('qErr').textContent = 'ค้นหาตรงต้องมี Google Maps API key (ช่องด้านบน)'; $('qErr').style.display='block'; return; }
+  if(!gk){ $('qErr').textContent = 'ค้นหาตรงต้องมี Google key — ใส่ครั้งเดียวที่ "ตั้งค่าขั้นสูง" (แท็บสแกนทำเล)'; $('qErr').style.display='block'; return; }
   const q = $('qSearchName').value.trim();
   if(!q){ $('qSearchRes').innerHTML = '<div class="muted">พิมพ์ชื่อร้านก่อน</div>'; return; }
   $('qErr').style.display = 'none';
@@ -2001,7 +1989,7 @@ function renderOwn(own){
 async function ownFetch(){
   const gk = qGetKey();
   $('ownErr').style.display = 'none';
-  if(!gk){ $('ownErr').textContent = 'ต้องมี Google Maps API key (ช่องด้านบนของหน้านี้)'; $('ownErr').style.display='block'; return; }
+  if(!gk){ $('ownErr').textContent = 'ยังไม่มี Google key ในระบบ — ใส่ครั้งเดียวที่ "ตั้งค่าขั้นสูง" (แท็บสแกนทำเล)'; $('ownErr').style.display='block'; return; }
   const btn = $('btnOwnFetch'); btn.disabled = true; const t0 = btn.textContent; btn.textContent = 'กำลังดึง…';
   try{
     const lp = await fetchOwnBranch(gk, {label:'ลาดพร้าววังหิน', lat:BRANCHES.LP.lat, lng:BRANCHES.LP.lng});
@@ -2282,14 +2270,6 @@ $('btnQClear').addEventListener('click', ()=>{
     sbFetch('jj3_queue_spots?key=not.is.null',{method:'DELETE',headers:{'Prefer':'return=minimal'}}).then(updateSyncBadge).catch(()=>{});
   }
 });
-$('btnSbSync').addEventListener('click', ()=>{
-  store.set(SBURL_KEY, $('inSbUrl').value.trim());
-  store.set(SBKEY_KEY, $('inSbKey').value.trim());
-  SYNC_STATE = 'off'; updateSyncBadge();
-  $('sbStatus').textContent = 'กำลังซิงก์…';
-  syncFromCloud(true);
-});
-
 /* ========== ดึงลงเพื่อรีเฟรช (มือถือ) ========== */
 (function(){
   let sy = 0, pulling = false;
@@ -2310,8 +2290,7 @@ $('btnSbSync').addEventListener('click', ()=>{
 (function init(){
   const k = store.get(KEY_KEY); if(k) $('inApiKey').value = k;
   const gk = store.get(GKEY_KEY); if(gk) $('inGKey').value = gk;
-  $('inSbUrl').value = store.get(SBURL_KEY) || SB_DEFAULT_URL;
-  $('inSbKey').value = store.get(SBKEY_KEY) || SB_DEFAULT_KEY;
+  store.del(SBURL_KEY); store.del(SBKEY_KEY); // ล้างค่าที่เคยเซฟ (ใช้ค่าฝังเท่านั้นแล้ว)
   updateSyncBadge();
   syncFromCloud(false);
   $('qZone').innerHTML = Q_ZONES.map((z,i)=>'<option value="'+i+'">'+esc(z[0])+'</option>').join('');
